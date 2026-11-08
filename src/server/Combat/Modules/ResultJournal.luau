@@ -71,7 +71,7 @@ function ResultJournal:Receipt(id, participants, entry, complete)
     return receipt.entry
 end
 
-function ResultJournal:Commit(id, participants)
+function ResultJournal:Commit(id: string, participants)
     assert(type(id) == "string" and #id > 0 and #id <= MAX_MATCH_ID_LENGTH and not id:find("[^ -~]") and type(participants) == "table" and #participants == 2, "Invalid result identity")
     for _, participant in participants do
         assert(type(participant.user_id) == "number" and participant.user_id % 1 == 0 and type(participant.style_id) == "string", "Invalid result participant")

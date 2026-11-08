@@ -374,6 +374,8 @@ function MoveDefinitions.Phase(age: number, startup: number, active: number, mov
 
         stage_offset = release + hit.active
     end
+
+    error("Attack timeline has no hits")
 end
 
 local GUARD_RESPONSE = {tags = {Kick = true}, window_frames = 8, stamina = 16, cooldown_frames = 120, recovery_frames = 12, capture_move = "ClinchGrab"}
@@ -907,11 +909,11 @@ for _, profile in MoveDefinitions do
             end
             move.permissions = permissions
             if move.pairing then
-                local control = table.clone(profile.control)
+                local pair_control = table.clone(profile.control)
                 for key, value in move.pairing.control or {} do
-                    control[key] = value
+                    pair_control[key] = value
                 end
-                move.pairing.control = control
+                move.pairing.control = pair_control
                 move.grab = move.pairing.on_hit == "Capture"
                 move.clinch_only = move.pairing.requires_control == true
                 move.shove = (move.pairing.shove_frames or 0) > 0

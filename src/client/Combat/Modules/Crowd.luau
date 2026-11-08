@@ -203,22 +203,25 @@ function Crowd.Initialize()
                 return
             end
 
+            local event_attribute = character:GetAttribute("LastHitPresentationEventId")
+            local event_id = if type(event_attribute) == "string" then event_attribute else nil
+
             if character:GetAttribute("LastHitPerfect") then
-                React("Perfect", character:GetAttribute("LastHitPresentationEventId"))
+                React("Perfect", event_id)
             elseif character:GetAttribute("LastHitWallSplat") then
-                React("WallSplat", character:GetAttribute("LastHitPresentationEventId"))
+                React("WallSplat", event_id)
             elseif character:GetAttribute("LastHitSpecial") and not character:GetAttribute("LastHitBlocked") and not character:GetAttribute("LastHitDodged") then
-                React("Special", character:GetAttribute("LastHitPresentationEventId"))
+                React("Special", event_id)
             elseif character:GetAttribute("LastHitCounter") and not character:GetAttribute("LastHitBlocked") and not character:GetAttribute("LastHitDodged") then
-                React("Counter", character:GetAttribute("LastHitPresentationEventId"))
+                React("Counter", event_id)
             elseif character:GetAttribute("LastHitMomentum") then
-                React("Momentum", character:GetAttribute("LastHitPresentationEventId"))
+                React("Momentum", event_id)
             elseif character:GetAttribute("LastHitDodged") then
-                React("Dodge", character:GetAttribute("LastHitPresentationEventId"))
+                React("Dodge", event_id)
             elseif character:GetAttribute("LastHitBlocked") then
-                React("Block", character:GetAttribute("LastHitPresentationEventId"))
+                React("Block", event_id)
             else
-                React("Hit", character:GetAttribute("LastHitPresentationEventId"))
+                React("Hit", event_id)
             end
         end)
 
@@ -256,7 +259,8 @@ function Crowd.Initialize()
             local connection = watched_fighters[watched_opponent]
 
             if connection then
-                connection:Disconnect() watched_fighters[watched_opponent] = nil
+                connection:Disconnect()
+                watched_fighters[watched_opponent] = nil
             end
         end
 
@@ -279,7 +283,8 @@ function Crowd.Initialize()
         if model == watched_opponent then
             local connection = watched_fighters[model]
             if connection then
-                connection:Disconnect() watched_fighters[model] = nil
+                connection:Disconnect()
+                watched_fighters[model] = nil
             end
             watched_opponent = nil
         end

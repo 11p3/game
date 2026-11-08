@@ -384,7 +384,11 @@ function PlayerData.Initialize()
         end
         local deadline = os.clock() + SAVE_DEADLINE_SECONDS
         while (next(records) or next(result_jobs)) and os.clock() < deadline do
-            for id, job in result_jobs do if job.committed then result_jobs[id] = nil end end task.wait(0.1) end
+            for id, job in result_jobs do
+                if job.committed then result_jobs[id] = nil end
+            end
+            task.wait(0.1)
+        end
     end)
 end
 

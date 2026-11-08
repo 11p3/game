@@ -558,7 +558,8 @@ local function CollectContacts(fighters, contacts)
 
         fighter.connected = true
 
-        local blocked = (not active_move.pairing or active_move.pairing.guard ~= "Bypass") and (target.state == "Guard" or target.state == "Blockstun") and (fighter.x - target.x) * -math.sin(target.yaw or -target.facing * math.pi * 0.5) + (fighter.z - target.z) * -math.cos(target.yaw or -target.facing * math.pi * 0.5) > 0
+        local target_yaw: number = target.yaw or -target.facing * math.pi * 0.5
+        local blocked = (not active_move.pairing or active_move.pairing.guard ~= "Bypass") and (target.state == "Guard" or target.state == "Blockstun") and (fighter.x - target.x) * -math.sin(target_yaw) + (fighter.z - target.z) * -math.cos(target_yaw) > 0
         local dodged = target.state == "DodgeActive"
         local response = (MoveDefinitions[target.fighter_id] or MoveDefinitions.Boxing).guard_response
         local eligible = response and active_move.guard_tag and response.tags[active_move.guard_tag]
@@ -687,8 +688,9 @@ function CombatSimulation.Step(fighters, match_frame: number?)
 
     for _, fighter in fighters do
         if fighter.attack_started and fighter.frame - fighter.attack_started <= (fighter.attack_stage_offset or 0) + (fighter.attack_stage_startup or fighter.attack_startup) then
-            fighter.attack_forward_x = -math.sin(fighter.yaw or -fighter.facing * math.pi * 0.5)
-            fighter.attack_forward_z = -math.cos(fighter.yaw or -fighter.facing * math.pi * 0.5)
+            local yaw: number = fighter.yaw or -fighter.facing * math.pi * 0.5
+            fighter.attack_forward_x = -math.sin(yaw)
+            fighter.attack_forward_z = -math.cos(yaw)
         end
     end
 

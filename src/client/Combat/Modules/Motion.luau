@@ -248,7 +248,8 @@ function Motion.Bind(character, root, animation_state, find_opponent)
                     local distance = (tip - head_position).Magnitude
 
                     if distance < nearest - 0.1 then
-                        fist = tip nearest = distance
+                        fist = tip
+                        nearest = distance
                     end
                 end
             end

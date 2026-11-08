@@ -196,7 +196,7 @@ function RollbackSession:StepFrame()
     self:Trim()
 end
 
-function RollbackSession:Submit(frame, input)
+function RollbackSession:Submit(frame: number, input)
     if type(frame) ~= "number" or frame ~= frame or frame % 1 ~= 0 or frame < 1 then
         return false, "invalid_frame"
     end
@@ -277,7 +277,7 @@ function RollbackSession:Submit(frame, input)
     return true, "rollback"
 end
 
-function RollbackSession:ReplayFrom(frame)
+function RollbackSession:ReplayFrom(frame: number)
     local current = self.state.frame
     self.state = RollbackSession.Copy(self.history[frame - 1])
     self.frame = self.state.frame
@@ -426,7 +426,7 @@ function RollbackSession:Snapshot()
     return RollbackSession.Copy(self.state)
 end
 
-function RollbackSession:SubmitPlayer(frame, input, slot)
+function RollbackSession:SubmitPlayer(frame: number, input, slot: number)
     if slot ~= 1 and slot ~= 2 then
         return false, "slot"
     end

@@ -2,6 +2,7 @@ local CombatInput = {}
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local ContextActionService = game:GetService("ContextActionService")
 local player
 local folder
@@ -55,7 +56,7 @@ function CombatInput.Initialize()
                 return Enum.ContextActionResult.Pass
             end
 
-            if not over_training_ui and enabled and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not UserInputService.ModalEnabled then
+            if not over_training_ui and enabled and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not GuiService.MenuIsOpen then
                 if action == "Guard" then guard = began else if began then pending[string.lower(action)] = true end end
             end
 
@@ -65,7 +66,7 @@ function CombatInput.Initialize()
 
     if RunService:IsStudio() then
         ContextActionService:BindActionAtPriority("CombatTestGuard", function(_, input_state)
-            if input_state == Enum.UserInputState.Begin and enabled and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not UserInputService.ModalEnabled then
+            if input_state == Enum.UserInputState.Begin and enabled and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not GuiService.MenuIsOpen then
                 studio_guard = not studio_guard
             end
 
@@ -90,6 +91,11 @@ function CombatInput.Initialize()
         guard = false
         pending = {jab = false, dodge = false, special = false, kick = false, technique = false, clinch = false}
     end)
+    GuiService.MenuOpened:Connect(function()
+        guard = false
+        studio_guard = false
+        pending = {jab = false, dodge = false, special = false, kick = false, technique = false, clinch = false}
+    end)
 
 end
 
@@ -104,7 +110,7 @@ end
 
 -- Only the fresh capture consumes taps; catch-up frames keep held controls.
 function CombatInput.Capture(current_input: boolean)
-    local allowed = enabled and not folder:GetAttribute("FightTransition") and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not UserInputService.ModalEnabled and not (training and training_gui.Panel.Visible)
+    local allowed = enabled and not folder:GetAttribute("FightTransition") and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not GuiService.MenuIsOpen and not (training and training_gui.Panel.Visible)
     local axis = if allowed then (if UserInputService:IsKeyDown(Enum.KeyCode.W) then 1 else 0) - (if UserInputService:IsKeyDown(Enum.KeyCode.S) then 1 else 0) else 0
     local strafe = if allowed then (if UserInputService:IsKeyDown(Enum.KeyCode.D) then 1 else 0) - (if UserInputService:IsKeyDown(Enum.KeyCode.A) then 1 else 0) else 0
 
@@ -124,7 +130,7 @@ function CombatInput.Capture(current_input: boolean)
     return {
         axis = axis,
         strafe = strafe,
-        guard = (allowed and guard) or (RunService:IsStudio() and studio_guard and not folder:GetAttribute("FightTransition") and player:GetAttribute("MatchStatus") == "Fighting"),
+        guard = (allowed and guard) or (RunService:IsStudio() and studio_guard and not GuiService.MenuIsOpen and not folder:GetAttribute("FightTransition") and player:GetAttribute("MatchStatus") == "Fighting"),
         jab = allowed and current_input and pending.jab,
         dodge = allowed and current_input and pending.dodge,
         special = allowed and current_input and pending.special,

@@ -290,7 +290,8 @@ function Combat.Initialize()
                 saved.Parent = replay_archive
                 table.insert(replay_order, saved)
                 if #replay_order > MAX_REPLAYS then
-                    table.remove(replay_order, 1):Destroy()
+                    local oldest = table.remove(replay_order, 1)
+                    if oldest then oldest:Destroy() end
                 end
             else
                 warn("Could not archive match " .. match.epoch .. ": " .. tostring(encoded))
@@ -355,7 +356,7 @@ function Combat.Initialize()
         invites:Handle(player, action, value, style_id)
     end)
 
-    shared.Remotes.Matchmaking.OnServerEvent:Connect(function(player, action, style_id, result_epoch, map_id, ai_options)
+    shared.Remotes.Matchmaking.OnServerEvent:Connect(function(player, action: string, style_id, result_epoch, map_id, ai_options)
         if action ~= "Queue" and action ~= "AI" and action ~= "Training" and action ~= "Cancel" and action ~= "Leave" and action ~= "Rematch" and action ~= "DismissResult" then
             return
         end
@@ -388,8 +389,8 @@ function Combat.Initialize()
         if match then
             return
         end
-        if invites.sessions[player] and action ~= "Cancel" then
-            return
+        if invites.sessions[player] then
+            if action ~= "Cancel" then return end
         end
 
         local offer = results.offers[player]

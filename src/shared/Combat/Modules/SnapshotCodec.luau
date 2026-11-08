@@ -2,6 +2,7 @@ local SnapshotCodec = {}
 local VERSION = 1
 local MAX_DEPTH = 24 -- Safety cap for corrupt nesting, not a measured engine recursion limit.
 local MAX_BYTES = 524288 -- Leave full-state headroom while bounding allocation from a malformed snapshot.
+type SnapshotValue = boolean | number | string | {[string | number]: SnapshotValue}
 
 local function Same(first, second)
     if first == second then
@@ -33,17 +34,17 @@ function SnapshotCodec.Encode(value, baseline)
         data = expanded
     end
 
-    local function Write(item, previous, depth)
+    local function Write(item: SnapshotValue?, previous: SnapshotValue?, depth: number)
         assert(depth <= MAX_DEPTH, "Snapshot nesting exceeds the limit")
         local kind = type(item)
         Reserve(1)
         if item == nil then
             buffer.writeu8(data, offset, 0)
             offset += 1
-        elseif kind == "boolean" then
+        elseif type(item) == "boolean" then
             buffer.writeu8(data, offset, if item then 2 else 1)
             offset += 1
-        elseif kind == "number" then
+        elseif type(item) == "number" then
             assert(item == item and math.abs(item) < math.huge, "Snapshot contains a nonfinite number")
             -- Use compact integers, but preserve negative zero and fractional values as doubles.
             local integer = item % 1 == 0 and item >= -2147483648 and item <= 2147483647 and (item ~= 0 or 1 / item ~= -math.huge)
@@ -51,30 +52,31 @@ function SnapshotCodec.Encode(value, baseline)
             buffer.writeu8(data, offset, if integer then 3 else 4)
             if integer then buffer.writei32(data, offset + 1, item) else buffer.writef64(data, offset + 1, item) end
             offset += if integer then 5 else 9
-        elseif kind == "string" then
+        elseif type(item) == "string" then
             assert(#item <= 65535, "Snapshot string exceeds the limit")
             Reserve(3 + #item)
             buffer.writeu8(data, offset, 5)
             buffer.writeu16(data, offset + 1, #item)
             buffer.writestring(data, offset + 3, item)
             offset += 3 + #item
-        elseif kind == "table" then
+        elseif type(item) == "table" then
             -- Send only changes against the acknowledged baseline.
-            local patch = type(previous) == "table"
+            local previous_table = if type(previous) == "table" then previous else nil
+            local patch = previous_table ~= nil
             Reserve(3)
             buffer.writeu8(data, offset, if patch then 7 else 6)
             local count_at = offset + 1
             offset += 3
             local count = 0
             for key, child in item do
-                if not patch or not Same(child, previous[key]) then
+                if not previous_table or not Same(child, previous_table[key]) then
                     Write(key, nil, depth + 1)
-                    Write(child, if patch then previous[key] else nil, depth + 1)
+                    Write(child, if previous_table then previous_table[key] else nil, depth + 1)
                     count += 1
                 end
             end
-            if patch then
-                for key in previous do
+            if previous_table then
+                for key in previous_table do
                     if item[key] == nil then
                         Write(key, nil, depth + 1)
                         Write(nil, nil, depth + 1)

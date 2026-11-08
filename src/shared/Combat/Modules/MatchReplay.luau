@@ -9,7 +9,7 @@ local HttpService = game:GetService("HttpService")
 
 local MatchReplay = {}
 -- Refresh these fingerprints when simulation source changes.
-local SOURCE_HASHES = table.freeze({CombatSimulation = 521640928, MatchSimulation = 104575513, AISimulation = 1870682120, TrainingSimulation = 4224684585, PairedActions = 2191544561, RollbackSession = 3930436490})
+local SOURCE_HASHES = table.freeze({CombatSimulation = 2352403340, MatchSimulation = 104575513, AISimulation = 2281590776, TrainingSimulation = 4224684585, PairedActions = 2191544561, RollbackSession = 3280080150})
 MatchReplay.SourceHashes = SOURCE_HASHES
 local HEADER_PREFIX_BYTES = 8
 local HEADER_LENGTH_OFFSET = 4
@@ -57,8 +57,9 @@ local function SimulationRules(value, victim)
     end
     local result = {}
     for key, child in value do
+        local child_is_victim = key == "victim"
         if not COSMETIC_FIELDS[key] or victim and key == "animation" then
-            result[key] = SimulationRules(child, key == "victim")
+            result[key] = SimulationRules(child, child_is_victim)
         end
     end
     return result

@@ -150,10 +150,10 @@ function AISimulation.Decide(fighter, opponent, now, difficulty_id)
     local observed_distance = math.sqrt((seen.x - fighter.x)^2 + (seen.z - fighter.z)^2)
     if seen.state == "AttackStartup" and seen.attack ~= ai.responded and observed_distance < 6.5 then
         ai.responded = seen.attack
-        local response = (ai.decision + (if difficulty_id == "Easy" then 2 else 0)) % 5
-        if response == 2 and fighter.stamina > 23 and fighter.frame >= fighter.dodge_ready then
+        local reaction_choice = (ai.decision + (if difficulty_id == "Easy" then 2 else 0)) % 5
+        if reaction_choice == 2 and fighter.stamina > 23 and fighter.frame >= fighter.dodge_ready then
             return Choose(fighter, command, "dodge", now, 30)
-        elseif response ~= 4 and fighter.block_meter > 30 then
+        elseif reaction_choice ~= 4 and fighter.block_meter > 30 then
             ai.guard_until = now + 18
         end
     end

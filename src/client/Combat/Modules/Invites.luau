@@ -1,5 +1,10 @@
 local Invites = {}
-local state = {inbox = {}}
+type Invite = {id: number, user_id: number, name: string, display_name: string}
+type SelectionFighter = {user_id: number, name: string, style_id: string, ready: boolean, vote: string?}
+type Selection = {id: number, phase: "Voting" | "Selecting", map_id: string?, seconds: number, slot: number, fighters: {SelectionFighter}, opponent: string, ready: boolean}
+type InviteState = {inbox: {Invite}, outgoing: {id: number, user_id: number}?, session: Selection?, message: string?}
+
+local state: InviteState = {inbox = {}}
 local remote
 local Refresh
 local cancelling_id

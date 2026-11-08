@@ -297,7 +297,7 @@ function FightInvites:Ready(player, invite_id, style_id)
     end
 end
 
-function FightInvites:Handle(player, action, value, style_id)
+function FightInvites:Handle(player, action: string, value: number?, style_id: string?)
     if player.Parent ~= self.context.Players then
         return
     end

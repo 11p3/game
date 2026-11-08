@@ -25,7 +25,7 @@ function Matchmaking.Initialize()
     local styles_open = false
     local styles_loading = false
     local style_generation = 0
-    local pending_mode
+    local pending_mode: string?
     local pending_result_epoch
     local selected_map = "Arena"
     local selected_opponent = "Boxing"
@@ -302,10 +302,14 @@ function Matchmaking.Initialize()
         RefreshSelection()
     end
 
-    local function OpenStyle(mode)
+    local function OpenStyle(mode: string)
         local status = player:GetAttribute("MatchStatus")
-        if status == "Fighting" or status == "Searching" or (status == "Selecting" and mode ~= "Selection") then
+        if status == "Fighting" or status == "Searching" then
             return
+        end
+
+        if status == "Selecting" then
+            if mode ~= "Selection" then return end
         end
 
         if mode ~= "Selection" and player:GetAttribute("DataStatus") == "Loading" then

@@ -35,7 +35,7 @@ local DEFAULT_KNOCKED_OUT_ANIMATION_ID = "rbxassetid://114741358713606"
 local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
 
-local function GetContactTime(track)
+local function GetContactTime(track: AnimationTrack?): number?
     -- Ignore contact metadata left over from a different animation asset.
     if not track or track.Animation:GetAttribute("TimingAssetId") ~= track.Animation.AnimationId then
         return nil
@@ -47,7 +47,7 @@ local function GetContactTime(track)
     return if track.Length > 0 then math.min(contact, math.max(0.001, track.Length - TRACK_END_EPSILON)) else contact
 end
 
-local function GetKnockedOutTime(track)
+local function GetKnockedOutTime(track: AnimationTrack?): number
     if not track then return 0 end
     if track.Length <= 0 then return FALL_LOAD_TIMEOUT end
     local earliest = math.max(0, track.Length - KNOCKDOWN_BLEND)
@@ -83,7 +83,7 @@ function Animations.Initialize()
     end)
 end
 
-local function LoadTracks(fighter_id, animator)
+local function LoadTracks(fighter_id: string, animator: Animator): ({[string]: AnimationTrack}, {AnimationTrack})
     local tracks, jab_tracks = {}, {}
     local profile = animations:FindFirstChild(fighter_id) or animations.Boxing
 
@@ -169,7 +169,8 @@ local function LoadTracks(fighter_id, animator)
 
         for _, clip in jab_folder:GetChildren() do
             if clip:IsA("Animation") and clip.AnimationId ~= "" then
-                configured = true break
+                configured = true
+                break
             end
         end
 
@@ -515,7 +516,7 @@ local function UpdateDowned(binding, delta_time, logical_paired_age)
 
 end
 
-local function UpdatePlayback(binding, now, movement_speed, logical_paired_age, seek_attack)
+local function UpdatePlayback(binding, now: number, movement_speed: number, logical_paired_age: number, seek_attack: boolean?)
     for name, track in binding.tracks do
         if track.IsPlaying then
             local base_speed = if name == "Move" then (if movement_speed <= 0.1 then 0 elseif binding.playback.move_direction < 0 then -1 else 1) else 1
@@ -540,7 +541,7 @@ local function UpdatePlayback(binding, now, movement_speed, logical_paired_age, 
                 local age = (binding.character:GetAttribute("AttackAgeFrames") or -1) / SIMULATION_HZ
                 if contact and age >= 0 then
                     local windup = binding.action.active_jab_startup / SIMULATION_HZ
-                    local position
+                    local position: number
                     if move.lunge then
                         if age < windup then
                             position, base_speed = contact * age / windup, contact / windup
@@ -570,7 +571,7 @@ local function UpdatePlayback(binding, now, movement_speed, logical_paired_age, 
                     local recovery = math.clamp((binding.character:GetAttribute("AttackRecoveryFrames") or 18) / SIMULATION_HZ, 0.08, 0.32)
                     local contact = GetContactTime(track) or track.Length * 0.4
                     local release_end = math.min(track.Length - TRACK_END_EPSILON, contact + math.min(1 / 30, math.max(0, track.Length - contact) * 0.5))
-                    local position
+                    local position: number
 
                     if age < windup then
                         position = contact * age / windup
