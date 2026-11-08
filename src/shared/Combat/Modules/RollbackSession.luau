@@ -1,13 +1,12 @@
 local TrainingSimulation = require(script.Parent.TrainingSimulation)
 
 local RollbackSession = {}
--- DJB2 seed and multiplier for reproducible checksums.
-local HASH_SEED = 5381
-local HASH_MULTIPLIER = 33
-local HASH_MODULUS = 4294967296 -- 2^32 to keep the checksum within 32 bits.
-local DEFAULT_HISTORY_FRAMES = 120 -- Two seconds at 60 Hz to bound stored history.
-local DEFAULT_ROLLBACK_FRAMES = 12 -- 200 ms maximum rewind so late inputs cannot keep rewriting the fight.
-local DEFAULT_FUTURE_FRAMES = 18 -- 300 ms of lead to bound how far ahead commands can be queued.
+local HASH_SEED = 5381 -- Standard DJB2 starting seed, not a gameplay tuning value.
+local HASH_MULTIPLIER = 33 -- 32 + 1 is DJB2's mixing step, paired with the 5381 seed.
+local HASH_MODULUS = 4294967296 -- 2^32 wraps the rolling hash to an unsigned 32-bit value.
+local DEFAULT_HISTORY_FRAMES = 120 -- Two seconds covers snapshot gaps while keeping memory per bout bounded.
+local DEFAULT_ROLLBACK_FRAMES = 12 -- 200 ms trades late-input recovery against undoing hits already seen.
+local DEFAULT_FUTURE_FRAMES = 18 -- Room for 14 frames of lead, 2 of input delay and 2 of scheduling slack.
 local INPUT_FIELDS = {"axis", "strafe", "guard", "jab", "dodge", "special", "kick", "technique", "clinch", "training"}
 
 RollbackSession.__index = RollbackSession

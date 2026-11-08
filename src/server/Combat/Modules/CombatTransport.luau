@@ -1,13 +1,13 @@
 local CombatTransport = {}
 CombatTransport.__index = CombatTransport
 
-local SNAPSHOT_CACHE_SIZE = 16 -- About 0.8 seconds of baselines at the 20 Hz snapshot rate.
+local SNAPSHOT_CACHE_SIZE = 16 -- Keep 0.8 seconds of acknowledgments without retaining every sent snapshot.
 local INPUT_BATCH_LIMIT = 8 -- Bound the redundant frame records handled by one packet.
 local INPUT_PACKET_LIMIT = 90 -- Allow normal 30 Hz batches with room for bursts, then drop excess.
 local RESYNC_REQUEST_SECONDS = 0.5 -- Throttle full resync requests so clients cannot force constant serialization.
 local SIMULATION_HZ = 60
 local EVENT_HISTORY_FRAMES = 120
-local INPUT_JITTER_FRAMES = 3 -- 50 ms of jitter allowance beyond measured one-way latency.
+local INPUT_JITTER_FRAMES = 3 -- Three ticks tolerate short arrival jitter without granting the full rewind window.
 
 function CombatTransport.New(context)
     return setmetatable({matches = context.matches, remote = context.remote, codec = context.codec, clock = context.clock, server_time = context.server_time, ready_at = {}, packet_budgets = {}, resync = {}}, CombatTransport)

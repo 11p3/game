@@ -5,12 +5,12 @@ function Combat.GetMetrics()
     return table.clone(update_metrics)
 end
 local MATCH_REQUEST_SECONDS = 0.3
-local SNAPSHOT_INTERVAL_FRAMES = 3 -- 20 Hz snapshots while combat still simulates at 60 Hz.
+local SNAPSHOT_INTERVAL_FRAMES = 3 -- One snapshot per three ticks cuts network work without reducing 60 Hz combat.
 local MAX_FRAME_DEBT_SECONDS = 0.25 -- Cap catch-up debt so one stall cannot create unbounded work.
 local RESULT_HOLD_FRAMES = 60
-local ROLLBACK_WINDOW_FRAMES = 12 -- 200 ms outer limit; transport tightens first arrivals using measured ping.
-local HISTORY_FRAMES = 120 -- Two seconds of retained state for rollback and event history.
-local FUTURE_INPUT_FRAMES = 18 -- 300 ms lead ceiling to reject commands queued too far ahead.
+local ROLLBACK_WINDOW_FRAMES = 12 -- 200 ms outer cap limits rewritten hits; measured ping tightens first arrivals.
+local HISTORY_FRAMES = 120 -- Two seconds covers snapshot gaps while bounding state and event history.
+local FUTURE_INPUT_FRAMES = 18 -- Covers 14-frame lead plus 2-frame delay, with 2 frames of scheduling slack.
 local LOBBY_UPDATE_SECONDS = 0.2
 local SIMULATION_HZ = 60
 local PlayerData = require(script.Parent.PlayerData)
@@ -62,7 +62,7 @@ function Combat.Initialize()
     local lobby_elapsed = LOBBY_UPDATE_SECONDS
     local STEP = 1 / SIMULATION_HZ
     local ARENA_SPACING = 512 -- Separate server bouts while each client renders its own local venue.
-    local UPDATE_BUDGET_SECONDS = 0.008 -- Soft 8 ms budget; a running simulation step cannot be interrupted.
+    local UPDATE_BUDGET_SECONDS = 0.008 -- Roughly half a 60 Hz frame for combat; this cannot interrupt a running step.
     local MAX_CATCHUP_STEPS = 4 -- Limit one bout's catch-up turn so other bouts get scheduled.
 
     local function IsReady(player)

@@ -7,9 +7,9 @@ local STORE_KEY_BYTES = 50 -- Split identity between scope and key to fit datast
 local SHORT_ID_SCOPE = "Short"
 local MAX_DRAIN_RESULTS = 4 -- Bound datastore work before yielding the journal to another drain.
 -- DJB2 distributes result IDs across shards; it is not a security hash.
-local HASH_SEED = 5381
-local HASH_MULTIPLIER = 33
-local HASH_MODULUS = 4294967296
+local HASH_SEED = 5381 -- Standard DJB2 starting seed, not a gameplay tuning value.
+local HASH_MULTIPLIER = 33 -- 32 + 1 is DJB2's mixing step, paired with the 5381 seed.
+local HASH_MODULUS = 4294967296 -- 2^32 wraps the rolling hash to an unsigned 32-bit value.
 ResultJournal.__index = ResultJournal
 ResultJournal.SHARDS = 16
 local MAX_PENDING = 64

@@ -1,8 +1,7 @@
 local SnapshotCodec = {}
 local VERSION = 1
--- Bound recursion and encoded size before allocating deeply nested snapshots.
-local MAX_DEPTH = 24
-local MAX_BYTES = 524288 -- 512 KiB ceiling for one encoded snapshot.
+local MAX_DEPTH = 24 -- Safety cap for corrupt nesting, not a measured engine recursion limit.
+local MAX_BYTES = 524288 -- Leave full-state headroom while bounding allocation from a malformed snapshot.
 
 local function Same(first, second)
     if first == second then
