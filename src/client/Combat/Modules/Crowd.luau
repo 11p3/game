@@ -1,8 +1,8 @@
 local Crowd = {}
-local AMBIENCE_PEAK_MULTIPLIER = 2.2
+local AMBIENCE_PEAK_MULTIPLIER = 2.2 -- Cap reactive peaks relative to the authored ambience volume.
 local CHEER_REFERENCE_VOLUME = 0.4
 local AMBIENCE_RISE_SECONDS = 0.12
-local AMBIENCE_SETTLE_SECONDS = 1.2
+local AMBIENCE_SETTLE_SECONDS = 1.2 -- Let the crowd settle more slowly than it rises.
 
 function Crowd.Initialize()
     local SoundService = game:GetService("SoundService")

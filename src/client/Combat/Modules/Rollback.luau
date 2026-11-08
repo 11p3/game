@@ -27,7 +27,7 @@ function Rollback.Initialize()
     local snapshot_bases = {}
     local snapshot_id = 0
     local resync_at = 0
-    local INPUT_DELAY = 2
+    local INPUT_DELAY = 2 -- 33 ms of input delay to absorb small arrival differences before rewinding.
 
     Presentation.Initialize()
 
@@ -81,6 +81,7 @@ function Rollback.Initialize()
             local value = packet[key]
             if type(value) ~= "number" or value % 1 ~= 0 or value < (if key == "frame" or key == "base_id" then 0 else 1) then return end
         end
+        -- Drop closed bouts before their snapshots can change opponent or menu state.
         if packet.epoch <= closed_epoch or packet.epoch < epoch then
             return
         end
@@ -133,6 +134,7 @@ function Rollback.Initialize()
             CombatInput.SetSession(packet.config)
             Presentation.Reset(epoch, packet.state)
         else
+            -- Refresh only remote predictions; preserve the local player's accepted commands.
             local remote_suffix = if slot == 1 then "" else "_one"
 
             for frame, input in session.inputs do
@@ -218,6 +220,7 @@ function Rollback.Initialize()
             if controlling and session.state.frame % 2 == 0 then
                 local batch = {}
 
+                -- Resend recent inputs so a dropped packet does not immediately lose a command.
                 for frame = math.max(1, session.state.frame - 3), session.state.frame + INPUT_DELAY do
                     local input = session.inputs[frame]
 

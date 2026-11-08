@@ -1,13 +1,13 @@
 local CombatTransport = {}
 CombatTransport.__index = CombatTransport
 
-local SNAPSHOT_CACHE_SIZE = 16
-local INPUT_BATCH_LIMIT = 8
-local INPUT_PACKET_LIMIT = 90
-local RESYNC_REQUEST_SECONDS = 0.5
+local SNAPSHOT_CACHE_SIZE = 16 -- About 0.8 seconds of baselines at the 20 Hz snapshot rate.
+local INPUT_BATCH_LIMIT = 8 -- Bound the redundant frame records handled by one packet.
+local INPUT_PACKET_LIMIT = 90 -- Allow normal 30 Hz batches with room for bursts, then drop excess.
+local RESYNC_REQUEST_SECONDS = 0.5 -- Throttle full resync requests so clients cannot force constant serialization.
 local SIMULATION_HZ = 60
 local EVENT_HISTORY_FRAMES = 120
-local INPUT_JITTER_FRAMES = 3
+local INPUT_JITTER_FRAMES = 3 -- 50 ms of jitter allowance beyond measured one-way latency.
 
 function CombatTransport.New(context)
     return setmetatable({matches = context.matches, remote = context.remote, codec = context.codec, clock = context.clock, server_time = context.server_time, ready_at = {}, packet_budgets = {}, resync = {}}, CombatTransport)
@@ -119,6 +119,7 @@ function CombatTransport:HandleInput(player, kind, packet_epoch, batch, snapshot
     local latency_frames = math.ceil(player:GetNetworkPing() * SIMULATION_HZ) + INPUT_JITTER_FRAMES
     local late_frames = math.clamp(latency_frames, INPUT_JITTER_FRAMES, match.session.rollback_window)
     local accepted = {}
+    -- Derive ownership from the server match, not a client-supplied slot.
     local slot = if player == match.opponent then 1 else 2
     for _, record in batch do
         local frame = type(record) == "table" and record.frame

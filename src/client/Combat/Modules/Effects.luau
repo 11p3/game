@@ -17,6 +17,7 @@ function Effects.Bind(character, root)
     local combat_effects = folder:WaitForChild("CombatEffects")
     local character_connections = {}
     local alive = true
+    -- Share the hit flash and attack outline instead of stacking highlights.
     local flash = Instance.new("Highlight")
 
     flash.Name = "ImpactFeedback"

@@ -1,5 +1,6 @@
 local modules = script.Parent:WaitForChild("Modules")
 
+-- Bind scenery and feedback before rollback starts presenting a fight.
 require(modules:WaitForChild("MapPresentation")).Initialize()
 require(modules:WaitForChild("Controller")).Initialize()
 require(modules:WaitForChild("Audio")).Initialize()

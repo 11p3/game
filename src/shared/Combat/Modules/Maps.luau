@@ -1,3 +1,4 @@
+-- Each map declares its crowd and lighting rules for local presentation.
 local Maps = {
     Arena = {
         Name = "Arena",

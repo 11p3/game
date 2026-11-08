@@ -197,6 +197,7 @@ function HUD.Bind(character, root)
             local style = Styles[character:GetAttribute("FighterId")] or Styles.Boxing
             local profile = MoveDefinitions[style.FighterId] or MoveDefinitions.Boxing
             local opponent_profile = opponent_character and MoveDefinitions[opponent_character:GetAttribute("FighterId")]
+            -- Hide Catch unless the opponent has a move with an eligible guard tag.
             local can_catch = false
             if profile.guard_response and opponent_profile then
                 for _, move in opponent_profile.moves do

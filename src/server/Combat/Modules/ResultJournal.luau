@@ -3,9 +3,10 @@ local ResultJournal = {}
 local JOURNAL_VERSION = 1
 local MAX_MATCH_ID_LENGTH = 100
 local IDENTITY_VERSION = 1
-local STORE_KEY_BYTES = 50
+local STORE_KEY_BYTES = 50 -- Split identity between scope and key to fit datastore name limits.
 local SHORT_ID_SCOPE = "Short"
-local MAX_DRAIN_RESULTS = 4
+local MAX_DRAIN_RESULTS = 4 -- Bound datastore work before yielding the journal to another drain.
+-- DJB2 distributes result IDs across shards; it is not a security hash.
 local HASH_SEED = 5381
 local HASH_MULTIPLIER = 33
 local HASH_MODULUS = 4294967296
@@ -13,7 +14,7 @@ ResultJournal.__index = ResultJournal
 ResultJournal.SHARDS = 16
 local MAX_PENDING = 64
 local MAX_RECENT = 128
-local LEASE_SECONDS = 30
+local LEASE_SECONDS = 30 -- Expire abandoned drain ownership so another server can retry.
 
 local function Bucket(value)
     if value == nil then
@@ -42,6 +43,7 @@ function ResultJournal:Receipt(id, participants, entry, complete)
     local key = if #id <= STORE_KEY_BYTES then id else string.sub(id, STORE_KEY_BYTES + 1)
     local receipt
 
+    -- Keep a durable receipt after the bounded recent-results cache expires.
     self.store:UpdateAsync(key, function(value)
         if value then
             assert(type(value) == "table" and value.version == IDENTITY_VERSION and value.id == id and Same(value.participants, participants), "Conflicting result identity")
@@ -156,6 +158,7 @@ function ResultJournal:Drain(shard, limit)
                 end
             end
             self:Receipt(entry.id, entry.participants, stable_entry, true)
+            -- Only report Saved after both player writes and the receipt are confirmed.
             if self.confirm then self.confirm(stable_entry) end
 
             local removed = false

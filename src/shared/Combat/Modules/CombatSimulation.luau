@@ -3,11 +3,11 @@ local Pairing = require(script.Parent.PairedActions).New(MoveDefinitions)
 
 local CombatSimulation = {VERSION = 10, Pairing = Pairing}
 local SIMULATION_HZ = 60
-local STAMINA_REST_DELAY = 45
+local STAMINA_REST_DELAY = 45 -- Wait 0.75 seconds after spending stamina before regenerating it.
 local STAMINA_RECOVERY_DELAY = 30
-local EXHAUSTION_RECOVERY_STAMINA = 40
+local EXHAUSTION_RECOVERY_STAMINA = 40 -- Restore a partial bar so exhaustion has a recovery cost.
 local MIN_PERFECT_WINDOW = 5
-local PERFECT_WINDOW_RATIO = 0.67
+local PERFECT_WINDOW_RATIO = 0.67 -- Use the final two-thirds of startup unless a move overrides its window.
 local PERFECT_DODGE_VISUAL_FRAMES = 60
 local MAX_RESOURCE = 100
 local BASE_JAB = MoveDefinitions.Boxing.moves.Jab
@@ -21,16 +21,16 @@ local DODGE_STARTUP = 3
 local DODGE_ACTIVE = 10
 local DODGE_RECOVERY = 12
 local DODGE_COOLDOWN = 60
-local INPUT_BUFFER = 6
+local INPUT_BUFFER = 6 -- 100 ms to catch presses just before recovery ends.
 local HIT_CHAIN_RECOVERY = BASE_JAB.cancels.Hit.attack
-local HIT_REACTION = 9
+local HIT_REACTION = 9 -- 150 ms of hit reaction to prevent immediate retaliation.
 local DODGE_STAMINA = 18
 local STAMINA_REGEN = 18 / SIMULATION_HZ
 local BLOCK_REGEN = 8 / SIMULATION_HZ
-local BLOCK_REGEN_DELAY = 120
+local BLOCK_REGEN_DELAY = 120 -- Two seconds without pressure before guard starts recovering.
 local EXHAUSTION_STUN = 60
 local GUARD_BREAK_STUN = 72
-local PERFECT_DODGE_STUN = 120
+local PERFECT_DODGE_STUN = 120 -- Two seconds for the defender to punish a perfect dodge.
 local GET_UP_FRAMES = 60
 local CLINCH_ESCAPE_MAX = 1000
 
@@ -59,6 +59,7 @@ local function StunFighter(fighter, duration: number, reason: string)
     fighter.queued_clinch = ""
 end
 
+-- Queue exhaustion for committed moves so they can finish before the stun.
 local function SpendStamina(fighter, amount: number, committed: boolean?)
     fighter.stamina = math.max(0, fighter.stamina - amount)
     fighter.stamina_regen_at = fighter.frame + STAMINA_REST_DELAY
@@ -659,6 +660,7 @@ local function ResolveContacts(fighters, contacts, match_frame)
 
 end
 
+-- Use each fighter's own recovery and paired reaction before exhaustion.
 local function ResolveExhaustion(fighters, match_frame)
     for _, fighter in fighters do
         if not fighter.exhaustion_pending or fighter.health <= 0 or fighter.attack_started or fighter.dodge_started or fighter.frame < fighter.exhaustion_ready then continue end
@@ -692,6 +694,7 @@ function CombatSimulation.Step(fighters, match_frame: number?)
 
     ResolvePerfectDodges(fighters, contacts)
 
+    -- Collect contacts before applying damage so same-frame trades can resolve.
     CollectContacts(fighters, contacts)
 
     ResolveContacts(fighters, contacts, match_frame)

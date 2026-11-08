@@ -8,27 +8,29 @@ local SnapshotCodec = require(script.Parent.SnapshotCodec)
 local HttpService = game:GetService("HttpService")
 
 local MatchReplay = {}
-local SOURCE_HASHES = table.freeze({CombatSimulation = 331801858, MatchSimulation = 3827203166, AISimulation = 2041144783, TrainingSimulation = 3398399384, PairedActions = 1925871316, RollbackSession = 4053955601})
+-- Refresh these fingerprints when simulation source changes.
+local SOURCE_HASHES = table.freeze({CombatSimulation = 521640928, MatchSimulation = 104575513, AISimulation = 1870682120, TrainingSimulation = 4224684585, PairedActions = 2191544561, RollbackSession = 2329692196})
 MatchReplay.SourceHashes = SOURCE_HASHES
 local HEADER_PREFIX_BYTES = 8
 local HEADER_LENGTH_OFFSET = 4
 local MIN_ARCHIVE_BYTES = 10
-local MAX_HEADER_BYTES = 524288
-local MAX_ADVANCE_FRAMES = 600
+local MAX_HEADER_BYTES = 524288 -- 512 KiB to bound archive parsing and checkpoint metadata.
+local MAX_ADVANCE_FRAMES = 600 -- At most ten seconds of replay work per advance call.
+-- DJB2 constants for the same bounded checksum scheme as rollback.
 local HASH_SEED = 5381
 local HASH_MULTIPLIER = 33
 local HASH_MODULUS = 4294967296
-local INPUT_SLOT_BYTES = 3
+local INPUT_SLOT_BYTES = 3 -- Two bytes for controls and one for a training command per player.
 local INPUT_FLAG_SHIFT = 3
 local INPUT_MASK_LIMIT = 2048
 local FORMAT_VERSION = 1
 local LEGACY_MOVE_VERSION = 5
 local LEGACY_RULES_HASH = 4178806607
 local LEGACY_SIMULATION_HASH = 1835614991
-local MAX_FRAMES = 18000
-local CHECKPOINT_FRAMES = 300
+local MAX_FRAMES = 18000 -- Five minutes at 60 Hz to bound each in-memory recording.
+local CHECKPOINT_FRAMES = 300 -- Five-second checkpoints to limit how much seeking must replay.
 local FRAME_BYTES = 6
-local MAGIC = 1296912722
+local MAGIC = 1296912722 -- Fixed archive marker to reject unrelated binary data.
 local FLAGS = {"guard", "jab", "dodge", "special", "kick", "technique", "clinch"}
 local ACTIONS = {""}
 for action in TrainingSimulation.Actions do
@@ -140,6 +142,7 @@ function MatchReplay.Capture(record, session, final)
     if record.status ~= "Recording" then
         return false
     end
+    -- Record confirmed frames so later rollback cannot rewrite archived commands.
     local through = if final then session.state.frame else math.max(0, session.state.frame - session.rollback_window)
     for frame = record.frames + 1, math.min(through, MAX_FRAMES) do
         local state, input = session.history[frame], session.used_inputs[frame]

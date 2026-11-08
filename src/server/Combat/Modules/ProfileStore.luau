@@ -1,13 +1,13 @@
 local ProfileStore = {}
 local LEGACY_DATA_VERSION = 1
 local JOURNAL_SHARD_COUNT = 16
-local MAX_SAFE_INTEGER = 9007199254740991
+local MAX_SAFE_INTEGER = 9007199254740991 -- 2^53 - 1 is the largest exactly represented integer.
 local MAX_MATCH_ID_LENGTH = 100
 ProfileStore.__index = ProfileStore
 
 local DATA_VERSION = 2
-local LEASE_SECONDS = 120
-local RECENT_RESULTS = 64
+local LEASE_SECONDS = 120 -- Two-minute lease gives autosaves room to renew before ownership expires.
+local RECENT_RESULTS = 64 -- Bound the short cache; durable journal watermarks handle older retries.
 local MAX_COUNT = 1000000000
 local PREFERENCES = {CameraMode = {Behind = true, Side = true}, MovementKeys = {Camera = true, WS = true, AD = true}, ShowHitboxes = {On = true, Off = true}}
 
@@ -186,6 +186,7 @@ function ProfileStore:AddResult(match_id, style_id, outcome, knockout)
     return true
 end
 
+-- Apply each shard sequence once so retried results cannot count twice.
 function ProfileStore.ApplyJournal(value, styles, entry, participant)
     local data = assert(Normalize(value, styles), "Unsupported profile data")
     local key = tostring(entry.shard)
@@ -231,6 +232,7 @@ function ProfileStore:Save(release)
     end
 
     local payload = if self.data then Normalize(self.data, self.styles) else nil
+    -- Capture the revision so edits during a yielding save remain pending.
     local revision = self.revision
     local pending = table.clone(self.pending_results)
     local reason = "Session lost"

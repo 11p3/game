@@ -1,6 +1,6 @@
 local Hitboxes = {}
 local MoveDefinitions = require(game:GetService("ReplicatedStorage").Combat.Modules.MoveDefinitions)
-local TARGET_DIAMETER = 0.24
+local TARGET_DIAMETER = 0.24 -- Mark the logical target point; this is not a physical hurtbox size.
 local container
 local boxes = {}
 local targets = {}

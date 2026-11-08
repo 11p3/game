@@ -1,8 +1,8 @@
 local Audio = {}
 local DEFAULT_REFERENCE_VOLUME = 0.5
 local REFERENCE_VOLUMES = {PerfectDodge = 0.65}
-local AUDIO_DEDUP_SECONDS = 8
-local ONE_SHOT_LIFETIME_SECONDS = 6
+local AUDIO_DEDUP_SECONDS = 8 -- Keep sound identities longer than rollback history to suppress correction repeats.
+local ONE_SHOT_LIFETIME_SECONDS = 6 -- Fallback cleanup for one-shots whose Ended event never arrives.
 local Debris = game:GetService("Debris")
 local SoundService = game:GetService("SoundService")
 local sounds
@@ -26,6 +26,7 @@ function Audio.Play(name: string, volume: number, speed: number, event_id: strin
     end
 
     if event_id then
+        -- Ignore corrected outcome suffixes so one contact cannot stack another sound.
         local event_key = string.match(event_id, "^([^:]+:[^:]+:[^:]+:[^:]+)") or event_id
         local key = (channel or name) .. ":" .. event_key
 

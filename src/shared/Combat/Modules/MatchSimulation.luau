@@ -6,13 +6,15 @@ local AISimulation = require(script.Parent.AISimulation)
 local MatchSimulation = {VERSION = 7}
 local Pairing = CombatSimulation.Pairing
 local SIMULATION_HZ = 60
-local BACKPEDAL_SPEED_MULTIPLIER = 0.6
-local GUARD_SPEED_MULTIPLIER = 0.55
+local BACKPEDAL_SPEED_MULTIPLIER = 0.6 -- Slow retreat to keep passive spacing from matching forward pressure.
+local GUARD_SPEED_MULTIPLIER = 0.55 -- Trade footwork speed for the protection of holding guard.
 local ADVANCE_BUFFER_FRAMES = 3
 local DEFAULT_RING_LIMIT = 17
+-- Round to 0.0001 studs and 0.000001 radians at simulation boundaries.
 local POSITION_PRECISION = 10000
 local YAW_PRECISION = 1000000
 local KNOCKDOWNS_TO_LOSE = 3
+-- Three seconds down first, then five seconds; the third knockdown loses.
 local FIRST_COUNT_FRAMES = 180
 local SECOND_COUNT_FRAMES = 300
 local GETUP_RETREAT_MARGIN = 0.25
@@ -21,7 +23,7 @@ local STEP = 1 / SIMULATION_HZ
 local TAU = math.pi * 2
 local MATCH_DURATION_FRAMES = 180 * SIMULATION_HZ
 local WALL_SPLAT_STUN = 42
-local WALL_SPLAT_COOLDOWN = 180
+local WALL_SPLAT_COOLDOWN = 180 -- Three seconds between splats to prevent repeated wall locks.
 local WALL_SPLAT_RECOVERY = 10
 
 local function ClampPosition(config, x, z)
@@ -33,6 +35,7 @@ local function ClampPosition(config, x, z)
         local center_z = ((config.back_limit or -DEFAULT_RING_LIMIT) + (config.front_limit or DEFAULT_RING_LIMIT)) * 0.5
         local radius = math.min((config.right_limit - config.left_limit) * 0.5, ((config.front_limit or DEFAULT_RING_LIMIT) - (config.back_limit or -DEFAULT_RING_LIMIT)) * 0.5)
         local dx, dz = x - center_x, z - center_z
+        -- Clip the square corners along the octagon's diagonal boundaries.
         local excess = math.max(0, math.abs(dx) + math.abs(dz) - radius * math.sqrt(2)) * 0.5
 
         x -= math.sign(dx) * excess
@@ -428,6 +431,7 @@ function MatchSimulation.Step(state, input, config)
 
     Control(player, npc, input, 2)
 
+    -- Run the second player through the same controls as the first.
     if config.pvp then
         Control(npc, player, {axis = input.axis_one or 0, strafe = input.strafe_one or 0, guard = input.guard_one, jab = input.jab_one, dodge = input.dodge_one, sidestep = input.sidestep_one, special = input.special_one, kick = input.kick_one, technique = input.technique_one, clinch = input.clinch_one}, 1)
     end

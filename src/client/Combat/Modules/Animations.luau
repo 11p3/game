@@ -1,9 +1,9 @@
 local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Animations = {}
 local SIMULATION_HZ = 60
-local TRACK_END_EPSILON = 0.001
+local TRACK_END_EPSILON = 0.001 -- Seek just inside a clip so reaching its exact endpoint does not stop the track.
 local TRACK_WEIGHT_EPSILON = 0.001
-local CONTACT_SEEK_TOLERANCE = 0.012
+local CONTACT_SEEK_TOLERANCE = 0.012 -- Ignore tiny contact-time differences to avoid jittering authored playback.
 local RESUME_SEEK_TOLERANCE = 0.12
 local RunService = game:GetService("RunService")
 local shared = game:GetService("ReplicatedStorage"):WaitForChild("Combat")
@@ -27,15 +27,16 @@ local UNIVERSAL_ACTIONS = {
 }
 local PERFECT_HOLD = Cinematics.PERFECT_HOLD
 local KNOCKDOWN_BLEND = 0.12
-local FALL_LOAD_TIMEOUT = 1.5
+local FALL_LOAD_TIMEOUT = 1.5 -- Bound loading waits so a missing fall clip cannot freeze the downed transition.
 local KNOCKED_OUT_LOAD_TIMEOUT = 1.5
 local KNOCKED_OUT_RETRY_SECONDS = 0.5
-local MAX_KNOCKED_OUT_RETRIES = 3
+local MAX_KNOCKED_OUT_RETRIES = 3 -- Retry delayed assets without starting an endless loading loop.
 local DEFAULT_KNOCKED_OUT_ANIMATION_ID = "rbxassetid://114741358713606"
-local ANIMATION_STALL_SECONDS = 0.15
+local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
 
 local function GetContactTime(track)
+    -- Ignore contact metadata left over from a different animation asset.
     if not track or track.Animation:GetAttribute("TimingAssetId") ~= track.Animation.AnimationId then
         return nil
     end
@@ -749,6 +750,7 @@ local function UpdateState(binding)
             binding.playback.waiting_action = false
             binding.playback.active_track:Play(0.025, 1, Cinematics.TimeScale)
         end
+        -- Let the missed punch follow through before blending into its stun pose.
         binding.action.perfect_action_until = os.clock() + PERFECT_HOLD
         binding.action.perfect_action_track = binding.playback.active_track
         binding.action.perfect_action_speed = math.max(MIN_FOLLOWTHROUGH_SPEED, (binding.playback.active_track.Length - binding.playback.active_track.TimePosition) / PERFECT_HOLD)
@@ -1094,6 +1096,7 @@ function Animations.Bind(character, animator)
     UpdateState(binding)
     UpdateAnimations(binding)
 
+    -- Keep one cleanup path for tracks, listeners and delayed callbacks.
     return binding.playback, function() Cleanup(binding) end
 end
 

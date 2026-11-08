@@ -33,6 +33,7 @@ function Feedback.Initialize()
         if not character.Parent then
             return
         end
+        -- Discard older yielding binds if appearance or character setup starts again.
         local version = (character_versions[character] or 0) + 1
         character_versions[character] = version
 

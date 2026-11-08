@@ -6,10 +6,10 @@ local perfect_started_at = -math.huge
 local perfect_color
 local PERFECT_HOLD = Cinematics.PERFECT_HOLD
 local PERFECT_FADE = 0.25
-local PERFECT_SPEED = 0.2
+local PERFECT_SPEED = 0.2 -- Slow visual playback to one-fifth speed without changing combat timers.
 local FADE_SECONDS = 0.3
-local BLACK_HOLD = 0.12
-local RESULT_TIMEOUT = 3
+local BLACK_HOLD = 0.12 -- Keep a short fully black beat before revealing the next screen.
+local RESULT_TIMEOUT = 3 -- Avoid trapping the player on black if a result packet never arrives.
 local fade_frame
 local fade_player
 local fade_folder

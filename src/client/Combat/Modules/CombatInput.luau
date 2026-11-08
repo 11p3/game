@@ -102,6 +102,7 @@ function CombatInput.SetSession(config)
     table.clear(training_commands)
 end
 
+-- Only the fresh capture consumes taps; catch-up frames keep held controls.
 function CombatInput.Capture(current_input: boolean)
     local allowed = enabled and not folder:GetAttribute("FightTransition") and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not UserInputService.ModalEnabled and not (training and training_gui.Panel.Visible)
     local axis = if allowed then (if UserInputService:IsKeyDown(Enum.KeyCode.W) then 1 else 0) - (if UserInputService:IsKeyDown(Enum.KeyCode.S) then 1 else 0) else 0

@@ -5,9 +5,9 @@ function Crowd.Initialize()
 
     local stadium = workspace:WaitForChild("Combat"):WaitForChild("Stadium")
     local crowd = stadium:WaitForChild("Crowd")
-    local MAX_SPECTATORS = 48
+    local MAX_SPECTATORS = 48 -- Cap avatar cost even when many players contribute friends.
     local FRIENDS_PER_PLAYER = 24
-    local LOAD_WORKERS = 4
+    local LOAD_WORKERS = 4 -- Overlap avatar requests without launching one task per spectator.
     local random = Random.new()
     local occupied_seats = {}
     local used_friends = {}
@@ -64,6 +64,7 @@ function Crowd.Initialize()
         until not player.Parent
         end
 
+        -- Fill empty or unavailable friend lists with asset-free fans.
         if #friends == 0 then
             for index = 1, FRIENDS_PER_PLAYER do
                 table.insert(friends, {Id = "Fan:" .. player.UserId .. ":" .. index, Username = "Fan", Fallback = true})

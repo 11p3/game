@@ -3,8 +3,8 @@ FightInvites.__index = FightInvites
 local INVITE_SECONDS = 30
 local STYLE_SECONDS = 60
 local VOTE_SECONDS = 10
-local MAX_INBOX = 6
-local MAX_ID = 9007199254740991
+local MAX_INBOX = 6 -- Bound pending invites so one player cannot fill another's inbox indefinitely.
+local MAX_ID = 9007199254740991 -- Keep IDs within the exact integer range of Lua numbers.
 
 function FightInvites.New(context)
     return setmetatable({context = context, pending = {}, outgoing = {}, sessions = {}, budgets = {}, send_ready = {}, list_ready = {}, next_id = 0}, FightInvites)
@@ -209,6 +209,7 @@ function FightInvites:ResolveVote(session)
             table.insert(tied, map_id)
         end
     end
+    -- Use stable map order before rotating tied votes by session ID.
     table.sort(tied, function(first, second) return self.context.Maps[first].Order < self.context.Maps[second].Order end)
 
     session.map_id = if #tied == 0 then "Arena" else tied[(session.id - 1) % #tied + 1]

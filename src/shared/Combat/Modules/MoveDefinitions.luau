@@ -248,10 +248,10 @@ local CONTROL_DEFAULTS = {
     regrab_delay = 90,
     holder_drain = 8,
     held_drain = 2,
-    escape_delay = 30,
+    escape_delay = 30, -- Half a second before the held fighter can escape.
     escape_startup = 18,
     escape_cost = 20,
-    escape_gain = 400,
+    escape_gain = 400, -- Three paced taps can fill 1000 despite the decay between taps.
     escape_decay = 2,
     escape_max = 1000,
     escape_hit_penalty = 250,
@@ -265,10 +265,12 @@ local LOCKED_PHASE = {movement = false, guard = false, dodge = false}
 local MAX_RESOURCE = 100
 local MAX_MOMENTUM = 3
 local MIN_HITBOX_SIZE = 0.001
+-- Cap strike advances to three studs over at most half a second.
 local MAX_ADVANCE_DISTANCE = 3
 local MAX_ADVANCE_FRAMES = 30
 local INPUT_ACTIONS = {jab = true, special = true, kick = true, technique = true}
 local ANIMATION_MODES = {Natural = true, Phased = true, Feint = true}
+-- Only these fields may receive cooldowns, so a definition cannot overwrite health.
 local COOLDOWN_KEYS = {feint_ready = true, body_kick_ready = true, kick_ready = true, shoot_ready = true, takedown_ready = true, clinch_ready = true}
 
 local function PrepareAI(profile)
@@ -297,6 +299,7 @@ local function PrepareAI(profile)
     return plan
 end
 
+-- Freeze nested rules so players, AI and replays cannot mutate shared definitions.
 local function Freeze(value)
     if table.isfrozen(value) then
         return value
@@ -401,6 +404,7 @@ local CLINCH_KNEE = {
     damage = 8, stamina = 10, block_cost = 35, momentum_gain = 0,
 }
 
+-- Reject malformed authored rules before the shared runtime uses them.
 function MoveDefinitions.Validate(catalog, unnormalized)
     local issues = {}
 
@@ -852,6 +856,7 @@ if #raw_issues > 0 then
     error(table.concat(messages, "\n"))
 end
 
+-- Normalize legacy fields once so runtime code reads one rule shape.
 for _, profile in MoveDefinitions do
     if type(profile) == "table" and profile.moves then
         profile.moves.ClinchGrab = profile.moves.ClinchGrab or table.clone(CLINCH_GRAB)

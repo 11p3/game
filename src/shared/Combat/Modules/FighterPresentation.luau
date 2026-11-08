@@ -3,7 +3,7 @@ export type Snapshot = {[string]: AttributeValue}
 export type Connection = {Disconnect: (Connection) -> ()}
 
 local FighterPresentation = {}
-local records = setmetatable({}, {__mode = "k"})
+local records = setmetatable({}, {__mode = "k"}) -- Weak keys let destroyed character records be collected.
 local EMPTY = {}
 local FIELDS = {
     PairedAnimationAgeFrames = true,
@@ -78,6 +78,7 @@ local FIELDS = {
     GetUpSerial = true,
     AppearanceReady = true
 }
+-- Write state before action serials so observers see one complete outcome.
 local TRIGGERS = {FighterId = 1, CombatState = 1, JabSequence = 2, HitSerial = 2, GetUpSerial = 2}
 
 local function Record(character)

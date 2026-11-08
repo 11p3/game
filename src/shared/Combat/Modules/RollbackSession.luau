@@ -1,12 +1,13 @@
 local TrainingSimulation = require(script.Parent.TrainingSimulation)
 
 local RollbackSession = {}
+-- DJB2 seed and multiplier for reproducible checksums.
 local HASH_SEED = 5381
 local HASH_MULTIPLIER = 33
-local HASH_MODULUS = 4294967296
-local DEFAULT_HISTORY_FRAMES = 120
-local DEFAULT_ROLLBACK_FRAMES = 12
-local DEFAULT_FUTURE_FRAMES = 18
+local HASH_MODULUS = 4294967296 -- 2^32 to keep the checksum within 32 bits.
+local DEFAULT_HISTORY_FRAMES = 120 -- Two seconds at 60 Hz to bound stored history.
+local DEFAULT_ROLLBACK_FRAMES = 12 -- 200 ms maximum rewind so late inputs cannot keep rewriting the fight.
+local DEFAULT_FUTURE_FRAMES = 18 -- 300 ms of lead to bound how far ahead commands can be queued.
 local INPUT_FIELDS = {"axis", "strafe", "guard", "jab", "dodge", "special", "kick", "technique", "clinch", "training"}
 
 RollbackSession.__index = RollbackSession
@@ -25,6 +26,7 @@ function RollbackSession.Copy(value)
     return result
 end
 
+-- Keep held controls, but never repeat a missing attack or dodge.
 function RollbackSession.Predict(input)
     return {
         axis = if input then input.axis or 0 else 0,
@@ -91,6 +93,7 @@ function RollbackSession.Checksum(state)
                 table.insert(keys, key)
             end
 
+            -- Sort keys so table iteration order cannot change the checksum.
             table.sort(keys, function(a, b)
                 if type(a) ~= type(b) then
                     return type(a) < type(b)
@@ -479,6 +482,7 @@ function RollbackSession:SubmitPlayer(frame, input, slot)
     local combined = RollbackSession.Copy(previous or self.used_inputs[frame] or RollbackSession.Predict(self.last_input))
 
     for _, key in INPUT_FIELDS do combined[key .. (if slot == 1 then "_one" else "")] = normalized[key] end
+    -- Keep accepted slot inputs separate so the other player can fill this frame.
     self.player_inputs[slot][frame] = normalized
     self.inputs[frame] = nil
 

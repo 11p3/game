@@ -31,6 +31,7 @@ function PairedActions.New(definitions)
                     release_at = math.max(release_at, fighter.attack_started + fighter.attack_startup + fighter.attack_active + fighter.attack_recovery)
                 end
 
+                -- Keep confirmed victim reactions playing after the clinch releases.
                 if not fighter.paired_action or not fighter.paired_action.confirmed then
                     fighter.paired_action = nil
                     fighter.throw_facing_until = 0
@@ -170,6 +171,7 @@ function PairedActions.New(definitions)
     end
 
     function Pairing.Step(fighters, spend_stamina)
+        -- Drain each clinch once, not once per participant.
         local processed
         for index, holder in fighters do
             if holder.clinch_holder ~= index or processed and processed[index] then

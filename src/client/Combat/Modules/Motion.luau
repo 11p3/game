@@ -1,11 +1,11 @@
 local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Motion = {}
-local MAX_DELTA_SECONDS = 0.1
+local MAX_DELTA_SECONDS = 0.1 -- Clamp visual time steps so a hitch cannot fling the additive pose.
 local MOVEMENT_THRESHOLD = 0.1
 local MAX_GAIT_SPEED = 20
 local GAIT_FREQUENCY = 0.9
 local FULL_STRIDE_SPEED = 16
-local RECOIL_DECAY = 18
+local RECOIL_DECAY = 18 -- Fade about 95% of recoil in 0.17 seconds.
 local SETTLE_EPSILON = 0.0001
 local RECOIL_EPSILON = 0.001
 local GAIT_RESPONSE = 18
@@ -13,7 +13,7 @@ local POSE_RESPONSE = 26
 local DODGE_STARTUP_FRAMES = 3
 local DODGE_RECOVERY_START = 13
 local DODGE_RECOVERY_FRAMES = 12
-local BLOCK_RECOIL_SCALE = 0.35
+local BLOCK_RECOIL_SCALE = 0.35 -- Keep blocked reactions smaller than clean-hit reactions.
 local DODGE_PITCH_DEGREES = 10
 local STRIDE_PITCH_DEGREES = -1.2
 local STRIDE_ROLL_DEGREES = 1.8
@@ -65,6 +65,7 @@ function Motion.Bind(character, root, animation_state, find_opponent)
     local motion_sleeping = false
     local offsets_applied = false
 
+    -- Remove the last overlay before Animator evaluates, so joint offsets cannot accumulate.
     table.insert(character_connections, RunService.PreAnimation:Connect(function()
         if not offsets_applied then return end
         offsets_applied = false
@@ -94,6 +95,7 @@ function Motion.Bind(character, root, animation_state, find_opponent)
         neck_offset = CFrame.identity
     end))
 
+    -- Apply visual layers after Animator without moving simulated combat roots.
     table.insert(character_connections, RunService.PreSimulation:Connect(function(delta_time)
         if not root_joint or not root_joint.Parent then
             return

@@ -10,6 +10,7 @@ end
 
 function Invites.Cancel()
     if state.session then
+        -- Block late Ready clicks locally while server cancellation is in flight.
         cancelling_id = state.session.id
         remote:FireServer("Cancel", state.session.id)
     end

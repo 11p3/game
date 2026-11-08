@@ -1,5 +1,6 @@
 local Training = {}
 
+-- Send training actions through rollback inputs so resets and playback remain replayable.
 function Training.Initialize()
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")

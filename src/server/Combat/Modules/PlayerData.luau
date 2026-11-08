@@ -1,8 +1,8 @@
 local PlayerData = {}
 local INITIAL_RETRY_SECONDS = 0.5
-local MAX_RETRY_SECONDS = 4
-local SAVE_DEADLINE_SECONDS = 25
-local LEASE_SAFETY_SECONDS = 5
+local MAX_RETRY_SECONDS = 4 -- Cap retry backoff so recovery stays responsive without tight request loops.
+local SAVE_DEADLINE_SECONDS = 25 -- Leave shutdown headroom instead of waiting indefinitely for storage.
+local LEASE_SAFETY_SECONDS = 5 -- Stop readiness shortly before the persistence lease expires.
 local RESULT_JOB_RETENTION_SECONDS = 120
 local JOURNAL_SCAN_SECONDS = 5
 local SETTINGS_REQUEST_SECONDS = 0.1
@@ -75,6 +75,7 @@ local function Work(record)
                     player:SetAttribute("DataStatus", if studio then "Studio" else "Ready")
                     player:SetAttribute("DataSaveState", "Saved")
                 end
+                -- Spread autosaves across eleven offsets to avoid a join-time request spike.
                 record.next_save = os.clock() + AUTOSAVE_SECONDS + player.UserId % 11
                 break
             end

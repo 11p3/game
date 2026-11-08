@@ -9,12 +9,12 @@ local MoveDefinitions = require(ReplicatedStorage.Combat.Modules.MoveDefinitions
 local Hitboxes = require(script.Parent.Hitboxes)
 local Presentation = {}
 local SIMULATION_HZ = 60
-local COOLDOWN_TICK_FRAMES = 6
+local COOLDOWN_TICK_FRAMES = 6 -- Refresh tenths-of-a-second labels at 10 Hz instead of every render.
 local COOLDOWN_FIELDS = {DodgeCooldown = "dodge", KickCooldown = "kick", TechniqueCooldown = "technique", ClinchCooldown = "clinch", GuardResponseCooldown = "guard_response"}
-local MAX_CORRECTION_DISTANCE = 8
+local MAX_CORRECTION_DISTANCE = 8 -- Snap large corrections instead of visibly sliding across the ring.
 local MOVEMENT_THRESHOLD = 0.1
 local BACKPEDAL_DOT_RATIO = 0.15
-local MAX_EFFECT_AGE_FRAMES = 30
+local MAX_EFFECT_AGE_FRAMES = 30 -- Skip stale half-second-old effects when catching up.
 local EVENT_HISTORY_FRAMES = 120
 local player
 local arena
@@ -163,6 +163,7 @@ function Presentation.Apply(session, epoch, delta_time)
 
     local correction_changed = session.rollback_count ~= render_rollbacks
     local corrected = session.history[render_frame]
+    -- Remove about 95% of a visual correction in 0.17 seconds, regardless of FPS.
     local decay = math.exp(-18 * math.clamp(delta_time or 1 / SIMULATION_HZ, 0, 0.1))
     local turn_alpha = 1 - math.exp(-(session.config.turn_response or 14) * math.clamp(delta_time or 1 / SIMULATION_HZ, 0, 0.1))
     local now = workspace:GetServerTimeNow()
@@ -412,6 +413,7 @@ function Presentation.Apply(session, epoch, delta_time)
     arena:SetAttribute("MatchState", state.phase)
     folder:SetAttribute("ActiveRollbackFrame", state.frame)
 
+    -- Commit all fighter fields before action observers react to changed serials.
     for _, character in characters do if character then FighterPresentation.Commit(character) end end
 
     local valid_keys = table.clone(paired_keys)

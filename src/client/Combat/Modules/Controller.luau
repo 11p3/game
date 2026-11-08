@@ -2,14 +2,15 @@ local Controller = {}
 local MAX_SHAKE_STRENGTH = 0.65
 local MIN_SHAKE_SECONDS = 0.05
 local MAX_SHAKE_SECONDS = 0.6
+-- Use different axis rates so camera shake does not trace one repeated line.
 local SHAKE_X_FREQUENCY = 24
 local SHAKE_Y_FREQUENCY = 28
 local SHAKE_ROLL_FREQUENCY = 22
 local SHAKE_ROLL_SCALE = 0.025
 local FOV_RESPONSE = 12
-local MAX_SIDE_FOV = 80
+local MAX_SIDE_FOV = 80 -- Widen framing before moving the camera into the crowd.
 local IMPACT_FOV_SHIFT = 6
-local OCCLUSION_INTERVAL = 1 / 15
+local OCCLUSION_INTERVAL = 1 / 15 -- Check scenery at 15 Hz; camera movement still updates every frame.
 local BEHIND_DISTANCE = 8
 local BEHIND_SHOULDER_OFFSET = 1.8
 
@@ -63,7 +64,7 @@ function Controller.Initialize()
     for _, viewer in Players:GetPlayers() do WatchPlayer(viewer) end
     local SIDE_FIELD_OF_VIEW = 45
     local MIN_SIDE_DISTANCE = 20
-    local MAX_SIDE_DISTANCE = 30
+    local MAX_SIDE_DISTANCE = 30 -- Keep the side camera in front of the stands.
     local COMBAT_CAMERA_LIMIT = 40
     local BEHIND_FIELD_OF_VIEW = 65
     local field_of_view = BEHIND_FIELD_OF_VIEW
@@ -90,7 +91,7 @@ function Controller.Initialize()
     local character
     local root
     local camera_ready = false
-    local camera_cframe = CFrame.identity
+    local camera_cframe = CFrame.identity -- Keep smoothing separate from shake so impact offsets cannot accumulate.
     local side_direction
     local behind_direction
     local camera_opponent

@@ -11,7 +11,7 @@ function MapPresentation.Initialize()
     local assets = ReplicatedStorage.Combat:WaitForChild("MapAssets")
     local current_map = "Arena"
     local active_model
-    local hidden = {}
+    local hidden = {} -- Remember authored visibility so returning to Arena restores each object correctly.
     local lighting_defaults = {}
     local effect_defaults = {}
     local visibility_connections = {}
@@ -46,6 +46,7 @@ function MapPresentation.Initialize()
                 hidden[object] = object.Enabled
             end
             object.Enabled = visible and hidden[object] == true
+            -- Remove already-emitted particles when hiding the arena.
             if not visible and object:IsA("ParticleEmitter") then
                 object:Clear()
             end

@@ -1,6 +1,6 @@
 local BoutResults = {}
 BoutResults.__index = BoutResults
-local REMATCH_SECONDS = 45
+local REMATCH_SECONDS = 45 -- Expire unused rematches so reserved arena slots can be released.
 
 function BoutResults.New(context)
     return setmetatable({context = context, offers = {}}, BoutResults)
@@ -119,6 +119,7 @@ function BoutResults:Accept(player, result_epoch, style_id, map_id, ai_options)
         end
     end
 
+    -- Send both players through selection again before reserving the next bout.
     if offer.opponent then
         if not context.BeginSelection(offer.player, offer.opponent, offer) then
             self:Clear(player); return false

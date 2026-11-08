@@ -20,6 +20,7 @@ local function CanUse(fighter, action, distance)
     if move.clinch_only and fighter.clinch_holder ~= 1 then
         return false
     end
+    -- Include lunge travel so grapplers can initiate before reaching grab range.
     local range = move.hitbox.range + (if move.lunge then move.lunge.distance else 0)
     return distance <= range - 0.15
 end
@@ -41,6 +42,7 @@ function AISimulation.Decide(fighter, opponent, now, difficulty_id)
     end
 
     ai.action_delay = difficulty.action_delay
+    -- Store delayed observations in fighter state so rollback repeats AI decisions.
     local index = now % difficulty.reaction_frames + 1
     local seen = ai.observations[index]
     local observed_move = opponent.attack_started and MoveDefinitions.Get(opponent.fighter_id, opponent.attack_kind)

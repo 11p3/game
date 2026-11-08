@@ -11,6 +11,7 @@ local deadline = 0
 local countdown_generation = 0
 
 local function RefreshCountdown()
+    -- Invalidate scheduled ticks when a vote closes or is replaced.
     countdown_generation += 1
     local generation = countdown_generation
     local function Tick()

@@ -5,12 +5,12 @@ function Combat.GetMetrics()
     return table.clone(update_metrics)
 end
 local MATCH_REQUEST_SECONDS = 0.3
-local SNAPSHOT_INTERVAL_FRAMES = 3
-local MAX_FRAME_DEBT_SECONDS = 0.25
+local SNAPSHOT_INTERVAL_FRAMES = 3 -- 20 Hz snapshots while combat still simulates at 60 Hz.
+local MAX_FRAME_DEBT_SECONDS = 0.25 -- Cap catch-up debt so one stall cannot create unbounded work.
 local RESULT_HOLD_FRAMES = 60
-local ROLLBACK_WINDOW_FRAMES = 12
-local HISTORY_FRAMES = 120
-local FUTURE_INPUT_FRAMES = 18
+local ROLLBACK_WINDOW_FRAMES = 12 -- 200 ms outer limit; transport tightens first arrivals using measured ping.
+local HISTORY_FRAMES = 120 -- Two seconds of retained state for rollback and event history.
+local FUTURE_INPUT_FRAMES = 18 -- 300 ms lead ceiling to reject commands queued too far ahead.
 local LOBBY_UPDATE_SECONDS = 0.2
 local SIMULATION_HZ = 60
 local PlayerData = require(script.Parent.PlayerData)
@@ -61,9 +61,9 @@ function Combat.Initialize()
     local invites
     local lobby_elapsed = LOBBY_UPDATE_SECONDS
     local STEP = 1 / SIMULATION_HZ
-    local ARENA_SPACING = 512
-    local UPDATE_BUDGET_SECONDS = 0.008
-    local MAX_CATCHUP_STEPS = 4
+    local ARENA_SPACING = 512 -- Separate server bouts while each client renders its own local venue.
+    local UPDATE_BUDGET_SECONDS = 0.008 -- Soft 8 ms budget; a running simulation step cannot be interrupted.
+    local MAX_CATCHUP_STEPS = 4 -- Limit one bout's catch-up turn so other bouts get scheduled.
 
     local function IsReady(player)
         local character = player and player.Character
@@ -269,6 +269,7 @@ function Combat.Initialize()
             return
         end
 
+        -- Wait beyond rollback before turning a provisional knockout into a saved result.
         local outcome = GetOutcome(match, forfeiting_player)
         RecordResult(match, outcome)
         if match.recording then
@@ -692,6 +693,7 @@ function Combat.Initialize()
                 break
             end
             if #update_queue == 0 then break end
+            -- Rotate work so budget pressure cannot always favor the same bout.
             update_cursor = update_cursor % #update_queue + 1
             local match = update_queue[update_cursor]
             if matches[match.epoch] ~= match then

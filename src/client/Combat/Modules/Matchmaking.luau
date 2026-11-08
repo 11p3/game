@@ -527,6 +527,7 @@ function Matchmaking.Initialize()
             result_panel.Knockdowns.Value.Text = tostring(packet.knockdowns)
             result_panel.Record.Text = string.format("PvP record  %dW / %dL / %dD", packet.record.wins, packet.record.losses, packet.record.draws)
             result_panel.Series.Text = string.format("You %d — %d %s", packet.series.you, packet.series.opponent, packet.opponent)
+            -- Reveal results only after this bout has reached a fully black transition.
             Cinematics.ShowScorecard(packet.epoch, function()
                 if scorecard and scorecard.epoch == packet.epoch then
                     result_pending = false

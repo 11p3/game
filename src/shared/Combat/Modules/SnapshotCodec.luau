@@ -1,7 +1,8 @@
 local SnapshotCodec = {}
 local VERSION = 1
+-- Bound recursion and encoded size before allocating deeply nested snapshots.
 local MAX_DEPTH = 24
-local MAX_BYTES = 524288
+local MAX_BYTES = 524288 -- 512 KiB ceiling for one encoded snapshot.
 
 local function Same(first, second)
     if first == second then
@@ -45,6 +46,7 @@ function SnapshotCodec.Encode(value, baseline)
             offset += 1
         elseif kind == "number" then
             assert(item == item and math.abs(item) < math.huge, "Snapshot contains a nonfinite number")
+            -- Use compact integers, but preserve negative zero and fractional values as doubles.
             local integer = item % 1 == 0 and item >= -2147483648 and item <= 2147483647 and (item ~= 0 or 1 / item ~= -math.huge)
             Reserve(if integer then 5 else 9)
             buffer.writeu8(data, offset, if integer then 3 else 4)
@@ -58,6 +60,7 @@ function SnapshotCodec.Encode(value, baseline)
             buffer.writestring(data, offset + 3, item)
             offset += 3 + #item
         elseif kind == "table" then
+            -- Send only changes against the acknowledged baseline.
             local patch = type(previous) == "table"
             Reserve(3)
             buffer.writeu8(data, offset, if patch then 7 else 6)
