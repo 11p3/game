@@ -4,6 +4,10 @@ local RollbackSession = {}
 local HASH_SEED = 5381 -- Standard DJB2 starting seed, not a gameplay tuning value.
 local HASH_MULTIPLIER = 33 -- 32 + 1 is DJB2's mixing step, paired with the 5381 seed.
 local HASH_MODULUS = 4294967296 -- 2^32 wraps the rolling hash to an unsigned 32-bit value.
+local HASH_BLOCK_BYTES = 4 -- Four-byte products stay below the exact-integer limit of 2^53.
+local HASH_BLOCK_MULTIPLIER = HASH_MULTIPLIER ^ HASH_BLOCK_BYTES
+local HASH_THIRD_WEIGHT = HASH_MULTIPLIER ^ 3
+local HASH_SECOND_WEIGHT = HASH_MULTIPLIER ^ 2
 local DEFAULT_HISTORY_FRAMES = 120 -- Two seconds covers snapshot gaps while keeping memory per bout bounded.
 local DEFAULT_ROLLBACK_FRAMES = 12 -- 200 ms trades late-input recovery against undoing hits already seen.
 local DEFAULT_FUTURE_FRAMES = 18 -- Room for 14 frames of lead, 2 of input delay and 2 of scheduling slack.
@@ -87,19 +91,28 @@ function RollbackSession.Checksum(state)
 
         if kind == "table" then
             local keys = {}
+            local key_kind
+            local uniform = true
 
             for key in value do
+                local current_kind = type(key)
+                if key_kind and key_kind ~= current_kind then uniform = false end
+                key_kind = current_kind
                 table.insert(keys, key)
             end
 
             -- Sort keys so table iteration order cannot change the checksum.
-            table.sort(keys, function(a, b)
-                if type(a) ~= type(b) then
-                    return type(a) < type(b)
-                end
+            if uniform and (key_kind == "string" or key_kind == "number") then
+                table.sort(keys)
+            else
+                table.sort(keys, function(a, b)
+                    if type(a) ~= type(b) then
+                        return type(a) < type(b)
+                    end
 
-                return if type(a) == "number" or type(a) == "string" then a < b else tostring(a) < tostring(b)
-            end)
+                    return if type(a) == "number" or type(a) == "string" then a < b else tostring(a) < tostring(b)
+                end)
+            end
 
             Hash("{")
 
@@ -114,7 +127,12 @@ function RollbackSession.Checksum(state)
 
             encoded = tostring(#encoded) .. ":" .. encoded
 
-            for index = 1, #encoded do
+            local block_end = #encoded - #encoded % HASH_BLOCK_BYTES
+            for index = 1, block_end, HASH_BLOCK_BYTES do
+                local first, second, third, fourth = string.byte(encoded, index, index + HASH_BLOCK_BYTES - 1)
+                hash = (hash * HASH_BLOCK_MULTIPLIER + first * HASH_THIRD_WEIGHT + second * HASH_SECOND_WEIGHT + third * HASH_MULTIPLIER + fourth) % HASH_MODULUS
+            end
+            for index = block_end + 1, #encoded do
                 hash = (hash * HASH_MULTIPLIER + string.byte(encoded, index)) % HASH_MODULUS
             end
         end

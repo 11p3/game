@@ -28,7 +28,9 @@ type DownedState = {
     fallback_knocked_out: Animation?,
     knockdown_active: boolean,
     knockdown_age: number,
-    fall_load_age: number
+    fall_load_age: number,
+    getup_active: boolean,
+    getup_serial: number
 }
 type PlaybackClock = {last_attack_age: number, attack_stall_age: number, last_paired_age: number, paired_stall_age: number, last_getup_age: number, getup_stall_age: number, paired_load_age: number}
 type Binding = {
@@ -87,7 +89,7 @@ local MAX_KNOCKED_OUT_RETRIES = 3 -- Retry delayed assets without starting an en
 local DEFAULT_KNOCKED_OUT_ANIMATION_ID = "rbxassetid://114741358713606"
 local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
-local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, Sidestep = true, ClinchHeld = true, ClinchEscape = true})
+local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, Sidestep = true, ClinchHeld = true, ClinchEscape = true, DodgeStartup = true, DodgeActive = true, DodgeRecovery = true})
 
 local function NumberAttribute(character: Model, name: string, fallback: number): number
     local value = character:GetAttribute(name)
@@ -269,6 +271,16 @@ local function LoadTracks(fighter_id: string, animator: Animator): ({[string]: A
     end
 
     return tracks, jab_tracks
+end
+
+local function StopAttack(binding: Binding, fade: number)
+    binding.playback.waiting_action = false
+    binding.action.resume_attack = false
+    binding.action.jab_sound_pending = false
+    local track = binding.playback.active_track
+    if track and track.IsPlaying then
+        track:Stop(fade)
+    end
 end
 
 local function PlayKnockedOut(binding: Binding)
@@ -464,9 +476,7 @@ local function PlayJab(binding: Binding, sequence: number, resuming: boolean?)
         track = binding.jab_tracks[(sequence - 1) % #binding.jab_tracks + 1]
     end
 
-    if binding.playback.active_track then
-        binding.playback.active_track:Stop(0.03)
-    end
+    StopAttack(binding, 0.03)
 
     if binding.tracks.ClinchRelease then
         binding.tracks.ClinchRelease:Stop(0.04)
@@ -515,10 +525,7 @@ local function UpdateStun(binding: Binding)
     local stunned = reaction == "Stun" and not followthrough
 
     if exhausted then
-        binding.playback.waiting_action = false
-        if binding.playback.active_track and binding.playback.active_track.IsPlaying then
-            binding.playback.active_track:Stop(0.05)
-        end
+        StopAttack(binding, 0.05)
         if binding.pair.paired_track and binding.pair.paired_track.IsPlaying then
             binding.pair.paired_track:Stop(0.05)
         end
@@ -723,6 +730,23 @@ local function UpdateLocomotion(binding: Binding, state, movement_speed)
     end
 end
 
+local function UpdateGetUp(binding: Binding, state: string, rewound: boolean?)
+    local getting_up = state == "GettingUp"
+    local getup_serial = NumberAttribute(binding.character, "GetUpSerial", 0)
+    if getting_up and (not binding.downed.getup_active or getup_serial ~= binding.downed.getup_serial or (rewound and binding.tracks.GetUp and not binding.tracks.GetUp.IsPlaying)) then
+        binding.downed.knockdown_age, binding.downed.fall_load_age = 0, 0
+        binding.downed.knocked_out_load_age, binding.downed.knocked_out_retries = 0, 0
+        binding.pair.finished_pair_key = nil
+        if binding.tracks.GetUp then
+            binding.tracks.GetUp:Play(0.05, 1, Cinematics.TimeScale)
+        end
+    elseif not getting_up and binding.downed.getup_active and binding.tracks.GetUp then
+        binding.tracks.GetUp:Stop(0.08)
+    end
+    binding.downed.getup_active = getting_up
+    binding.downed.getup_serial = getup_serial
+end
+
 local function UpdateAnimations(binding: Binding, delta_time)
     delta_time = math.clamp(delta_time or 0, 0, 0.1)
     local movement_speed = NumberAttribute(binding.character, "CombatMoveSpeed", 0)
@@ -734,6 +758,9 @@ local function UpdateAnimations(binding: Binding, delta_time)
     local logical_attack_age = NumberAttribute(binding.character, "AttackAgeFrames", -1)
     local logical_paired_age = NumberAttribute(binding.character, "PairedAnimationAgeFrames", -1)
     local logical_getup_age = NumberAttribute(binding.character, "GetUpAgeFrames", -1)
+    if logical_getup_age >= 0 and logical_getup_age < binding.clock.last_getup_age then
+        UpdateGetUp(binding, StringAttribute(binding.character, "CombatState") or "Idle", true)
+    end
     binding.clock.attack_stall_age = if logical_attack_age >= 0 and logical_attack_age == binding.clock.last_attack_age then binding.clock.attack_stall_age + delta_time else 0
     binding.clock.paired_stall_age = if logical_paired_age >= 0 and logical_paired_age == binding.clock.last_paired_age then binding.clock.paired_stall_age + delta_time else 0
     binding.clock.getup_stall_age = if logical_getup_age >= 0 and logical_getup_age == binding.clock.last_getup_age then binding.clock.getup_stall_age + delta_time else 0
@@ -809,13 +836,7 @@ local function UpdateDownedState(binding: Binding, state)
     end
     binding.downed.knockdown_active = down
 
-    if binding.tracks.GetUp then
-        if state == "GettingUp" and not binding.tracks.GetUp.IsPlaying then
-            binding.tracks.GetUp:Play(0.05, 1, 1)
-        elseif binding.action.previous_state == "GettingUp" and state ~= "GettingUp" and binding.tracks.GetUp.IsPlaying then
-            binding.tracks.GetUp:Stop(0.08)
-        end
-    end
+    UpdateGetUp(binding, state)
 end
 
 local function UpdateState(binding: Binding)
@@ -836,21 +857,13 @@ local function UpdateState(binding: Binding)
         binding.action.perfect_action_until = os.clock() + PERFECT_HOLD
         binding.action.perfect_action_track = active_track
         binding.action.perfect_action_speed = math.max(MIN_FOLLOWTHROUGH_SPEED, (active_track.Length - active_track.TimePosition) / PERFECT_HOLD)
-        task.delay(PERFECT_HOLD, function()
-            if binding.alive and binding.character.Parent and StringAttribute(binding.character, "CombatState") == "Stunned" and binding.tracks.Stun then
-                UpdateStun(binding)
-            end
-        end)
     end
 
     if binding.tracks.ClinchRelease then
         local move = MoveDefinitions.Get(StringAttribute(binding.character, "FighterId") or "Boxing", binding.playback.active_kind)
         local finishing_grapple = binding.playback.active_track and (binding.playback.active_track.IsPlaying or binding.playback.waiting_action) and move and (move.shove or move.takedown) and StringAttribute(binding.character, "JabResult") == "Hit"
         if state == "ClinchRelease" and not finishing_grapple then
-            binding.playback.waiting_action = false
-            if binding.playback.active_track then
-                binding.playback.active_track:Stop(0.04)
-            end
+            StopAttack(binding, 0.04)
             binding.tracks.ClinchRelease.Priority = Enum.AnimationPriority.Action2
             binding.tracks.ClinchRelease:Play(0.05)
         elseif state == "Stunned" or state == "HitReact" or state == "Knockdown" or state == "Knockout" or state == "BoutOver" then
@@ -871,13 +884,12 @@ local function UpdateState(binding: Binding)
     end
 
     if INTERRUPT_ACTION_STATES[state] then
-        if binding.tracks.Dodge then
+        if state:sub(1, 5) ~= "Dodge" and binding.tracks.Dodge then
             binding.tracks.Dodge:Stop(0.03)
         end
 
         if not preserve_punch then
-            binding.playback.waiting_action = false
-            if binding.playback.active_track then binding.playback.active_track:Stop(0.03) end
+            StopAttack(binding, 0.03)
         end
     end
 
@@ -915,29 +927,6 @@ local function OnAttack(binding: Binding)
 
     if sequence > 0 then
         PlayJab(binding, NumberAttribute(binding.character, "JabVariant", sequence))
-    end
-end
-
-local function OnGetUp(binding: Binding)
-    if (NumberAttribute(binding.character, "GetUpSerial", 0)) <= 0 then
-        return
-    end
-
-    binding.downed.knockdown_active = false
-    binding.downed.knockdown_age = 0
-    binding.downed.knocked_out_started = false
-    binding.pair.finished_pair_key = nil
-    binding.downed.fall_load_age = 0
-    binding.downed.knocked_out_load_age, binding.downed.knocked_out_retries = 0, 0
-    if binding.tracks.KnockedOut then
-        binding.tracks.KnockedOut:Stop(0.08)
-    end
-    if binding.tracks.Knockdown then
-        binding.tracks.Knockdown:Stop(0.1)
-    end
-
-    if binding.tracks.GetUp and not binding.tracks.GetUp.IsPlaying then
-        binding.tracks.GetUp:Play(0.05)
     end
 end
 
@@ -1003,6 +992,8 @@ local function CorrectAnimations(binding: Binding, valid)
         binding.action.perfect_action_until = 0
         binding.action.perfect_action_track = nil
         binding.downed.knockdown_active = false
+        binding.downed.getup_active = false
+        binding.downed.getup_serial = 0
         binding.downed.knocked_out_started = false
         binding.downed.knocked_out_load_age, binding.downed.knocked_out_retries = 0, 0
         binding.downed.knockdown_age, binding.downed.fall_load_age = 0, 0
@@ -1021,9 +1012,7 @@ local function CorrectAnimations(binding: Binding, valid)
     end
 
     if binding.action.active_jab_event and not valid[binding.action.active_jab_event] then
-        if binding.playback.active_track then
-            binding.playback.active_track:Stop(0.05)
-        end
+        StopAttack(binding, 0.05)
         binding.playback.active_track = nil
         binding.playback.waiting_action = false
         binding.action.active_jab_event = nil
@@ -1097,7 +1086,7 @@ function Animations.Bind(character: Model, animator: Animator)
             previous_state = StringAttribute(character, "CombatState") or "Idle"
         },
         pair = {},
-        downed = {knockdown_active = false, knockdown_age = 0, fall_load_age = 0, knocked_out_started = false, knocked_out_load_age = 0, knocked_out_retries = 0},
+        downed = {knockdown_active = false, knockdown_age = 0, fall_load_age = 0, knocked_out_started = false, knocked_out_load_age = 0, knocked_out_retries = 0, getup_active = false, getup_serial = 0},
         clock = {paired_load_age = 0, last_attack_age = -1, attack_stall_age = 0, last_paired_age = -1, paired_stall_age = 0, last_getup_age = -1, getup_stall_age = 0},
         clinch = {last_escape = 0, clinch_tracks = {}}
     }
@@ -1141,9 +1130,7 @@ function Animations.Bind(character: Model, animator: Animator)
 
     table.insert(binding.character_connections, RunService.Heartbeat:Connect(callbacks.UpdateAnimations))
 
-    table.insert(binding.character_connections, FighterPresentation.Observe(binding.character, "GetUpSerial", function()
-        OnGetUp(binding)
-    end))
+    table.insert(binding.character_connections, FighterPresentation.Observe(binding.character, "GetUpSerial", callbacks.UpdateState))
 
     for _, field in {"CombatState", "StunReason"} do
         table.insert(binding.character_connections, FighterPresentation.Observe(binding.character, field, callbacks.UpdateState))
