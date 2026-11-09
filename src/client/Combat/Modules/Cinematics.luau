@@ -61,8 +61,10 @@ function Cinematics.ShowScorecard(epoch, callback)
     if type(epoch) ~= "number" or epoch < bout_epoch then
         return
     end
-    if not Cinematics.BeginEnd(epoch) then
-        callback(); return
+    if not Cinematics.BeginEnd(epoch) or transition.stage == "In" then
+        -- A late result can appear once the black-screen handoff has finished.
+        callback()
+        return
     end
     transition.callback = callback
 end

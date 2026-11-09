@@ -369,18 +369,11 @@ function Combat.Initialize()
             return
         end
 
-        local now = os.clock()
-
-        if now < (requests[player] or 0) then
-            return
-        end
-
-        requests[player] = now + MATCH_REQUEST_SECONDS
-
         local match = player_matches[player]
 
+        -- Leaving or cancelling must still work immediately after a start request.
         if action == "Leave" then
-            if match then
+            if match and result_epoch == match.epoch then
                 EndBout(match, "Match ended", player)
             end
             return
@@ -392,6 +385,21 @@ function Combat.Initialize()
         if invites.sessions[player] then
             if action ~= "Cancel" then return end
         end
+
+        if action == "Cancel" then
+            if invites.sessions[player] or player:GetAttribute("MatchStatus") == "Searching" then
+                RemoveFromQueue(player)
+                invites:Clear(player)
+                player:SetAttribute("MatchStatus", "Menu")
+            end
+            return
+        end
+
+        local now = os.clock()
+        if now < (requests[player] or 0) then
+            return
+        end
+        requests[player] = now + MATCH_REQUEST_SECONDS
 
         local offer = results.offers[player]
         if action == "AI" or (action == "Rematch" and offer and not offer.opponent) then
@@ -427,9 +435,7 @@ function Combat.Initialize()
         invites:Clear(player)
         results:Clear(player)
 
-        if action == "Cancel" then
-            player:SetAttribute("MatchStatus", "Menu")
-        elseif PlayerData.IsLoading(player) then
+        if PlayerData.IsLoading(player) then
             player:SetAttribute("MatchStatus", "Loading data")
         elseif action == "Queue" and not PlayerData.IsReady(player) then
             player:SetAttribute("MatchStatus", "Data unavailable — try Vs AI")

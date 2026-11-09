@@ -72,7 +72,7 @@ function Matchmaking.Initialize()
         leave_pending = true
         Cinematics.AtBlack(epoch, function()
             if player:GetAttribute("MatchStatus") == "Fighting" and folder:GetAttribute("RollbackEpoch") == epoch then
-                matchmaking:FireServer("Leave")
+                matchmaking:FireServer("Leave", nil, epoch)
             end
         end)
     end)
