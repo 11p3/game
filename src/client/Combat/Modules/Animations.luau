@@ -516,13 +516,83 @@ local function UpdateDowned(binding, delta_time, logical_paired_age)
 
 end
 
+local function UpdateAttackPlayback(binding, track: AnimationTrack, move, now: number, seek_attack: boolean?): number
+    local base_speed = 1
+
+    if track.Length > 0 and move and binding.action.active_jab_mode == "Natural" and not move.victim_animation and binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until then
+        local contact = GetContactTime(track)
+        local age = (binding.character:GetAttribute("AttackAgeFrames") or -1) / SIMULATION_HZ
+        if contact and age >= 0 then
+            local windup = binding.action.active_jab_startup / SIMULATION_HZ
+            local position: number
+            if move.lunge then
+                if age < windup then
+                    position, base_speed = contact * age / windup, contact / windup
+                else
+                    position, base_speed = contact + age - windup, 1
+                end
+            elseif age < windup then
+                base_speed = contact / math.max(0.001, windup - binding.action.active_action_start)
+                position = math.max(0, age - binding.action.active_action_start) * base_speed
+            else
+                position, base_speed = contact + age - windup, 1
+            end
+            position = math.clamp(position, 0, track.Length - TRACK_END_EPSILON)
+            if seek_attack or math.abs(track.TimePosition - position) > CONTACT_SEEK_TOLERANCE then
+                track.TimePosition = position
+            end
+        end
+    end
+
+    if track.Length > 0 and move and (binding.action.active_jab_mode == "Phased" or binding.action.active_jab_mode == "Feint") then
+        local state = binding.character:GetAttribute("CombatState")
+
+        if binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until and (state == "AttackStartup" or state == "AttackActive" or state == "AttackRecovery") then
+            local age = (binding.character:GetAttribute("AttackAgeFrames") or 0) / SIMULATION_HZ
+            local windup = binding.action.active_jab_startup / SIMULATION_HZ
+            local release = (binding.character:GetAttribute("AttackActiveFrames") or CombatSimulation.JabActiveFrames) / SIMULATION_HZ
+            local recovery = math.clamp((binding.character:GetAttribute("AttackRecoveryFrames") or 18) / SIMULATION_HZ, 0.08, 0.32)
+            local contact = GetContactTime(track) or track.Length * 0.4
+            local release_end = math.min(track.Length - TRACK_END_EPSILON, contact + math.min(1 / 30, math.max(0, track.Length - contact) * 0.5))
+            local position: number
+
+            if age < windup then
+                position = contact * age / windup
+                base_speed = contact / windup
+            elseif binding.action.active_jab_mode == "Feint" then
+                local returning = math.clamp((age - windup) / recovery, 0, 1)
+                position = release_end + (track.Length - release_end) * returning
+                base_speed = if returning < 1 then (track.Length - release_end) / recovery else 1
+            elseif age < windup + release then
+                position = contact + (release_end - contact) * (age - windup) / release
+                base_speed = (release_end - contact) / release
+            else
+                local returning = math.clamp((age - windup - release) / recovery, 0, 1)
+
+                position = release_end + (track.Length - release_end) * returning
+                base_speed = if returning < 1 then (track.Length - release_end) / recovery else 1
+            end
+
+            local target = math.clamp(position, 0, track.Length - TRACK_END_EPSILON)
+            local return_start = windup + (if binding.action.active_jab_mode == "Feint" then 0 else release)
+            local returning = math.clamp((age - return_start) / recovery, 0, 1)
+            track:AdjustWeight(1 - returning * returning * (3 - 2 * returning), 0.025)
+
+            if seek_attack or math.abs(track.TimePosition - target) > CONTACT_SEEK_TOLERANCE then
+                track.TimePosition = target
+            end
+        end
+    end
+
+    return base_speed
+end
+
 local function UpdatePlayback(binding, now: number, movement_speed: number, logical_paired_age: number, seek_attack: boolean?)
+    local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", binding.playback.active_kind)
+
     for name, track in binding.tracks do
         if track.IsPlaying then
             local base_speed = if name == "Move" then (if movement_speed <= 0.1 then 0 elseif binding.playback.move_direction < 0 then -1 else 1) else 1
-
-            local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", binding.playback.active_kind)
-
 
             if track == binding.pair.paired_track then
                 local age = logical_paired_age / SIMULATION_HZ
@@ -536,68 +606,8 @@ local function UpdatePlayback(binding, now: number, movement_speed: number, logi
                 end
             end
 
-            if track == binding.playback.active_track and track.Length > 0 and move and binding.action.active_jab_mode == "Natural" and not move.victim_animation and binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until then
-                local contact = GetContactTime(track)
-                local age = (binding.character:GetAttribute("AttackAgeFrames") or -1) / SIMULATION_HZ
-                if contact and age >= 0 then
-                    local windup = binding.action.active_jab_startup / SIMULATION_HZ
-                    local position: number
-                    if move.lunge then
-                        if age < windup then
-                            position, base_speed = contact * age / windup, contact / windup
-                        else
-                            position, base_speed = contact + age - windup, 1
-                        end
-                    elseif age < windup then
-                        base_speed = contact / math.max(0.001, windup - binding.action.active_action_start)
-                        position = math.max(0, age - binding.action.active_action_start) * base_speed
-                    else
-                        position, base_speed = contact + age - windup, 1
-                    end
-                    position = math.clamp(position, 0, track.Length - TRACK_END_EPSILON)
-                    if seek_attack or math.abs(track.TimePosition - position) > CONTACT_SEEK_TOLERANCE then
-                        track.TimePosition = position
-                    end
-                end
-            end
-
-            if track == binding.playback.active_track and track.Length > 0 and move and (binding.action.active_jab_mode == "Phased" or binding.action.active_jab_mode == "Feint") then
-                local state = binding.character:GetAttribute("CombatState")
-
-                if binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until and (state == "AttackStartup" or state == "AttackActive" or state == "AttackRecovery") then
-                    local age = (binding.character:GetAttribute("AttackAgeFrames") or 0) / SIMULATION_HZ
-                    local windup = binding.action.active_jab_startup / SIMULATION_HZ
-                    local release = (binding.character:GetAttribute("AttackActiveFrames") or CombatSimulation.JabActiveFrames) / SIMULATION_HZ
-                    local recovery = math.clamp((binding.character:GetAttribute("AttackRecoveryFrames") or 18) / SIMULATION_HZ, 0.08, 0.32)
-                    local contact = GetContactTime(track) or track.Length * 0.4
-                    local release_end = math.min(track.Length - TRACK_END_EPSILON, contact + math.min(1 / 30, math.max(0, track.Length - contact) * 0.5))
-                    local position: number
-
-                    if age < windup then
-                        position = contact * age / windup
-                        base_speed = contact / windup
-                    elseif binding.action.active_jab_mode == "Feint" then
-                        local returning = math.clamp((age - windup) / recovery, 0, 1)
-                        position = release_end + (track.Length - release_end) * returning
-                        base_speed = if returning < 1 then (track.Length - release_end) / recovery else 1
-                    elseif age < windup + release then
-                        position = contact + (release_end - contact) * (age - windup) / release
-                        base_speed = (release_end - contact) / release
-                    else
-                        local returning = math.clamp((age - windup - release) / recovery, 0, 1)
-
-                        position = release_end + (track.Length - release_end) * returning
-                        base_speed = if returning < 1 then (track.Length - release_end) / recovery else 1
-                    end
-
-                    local target = math.clamp(position, 0, track.Length - TRACK_END_EPSILON)
-                    local returning = math.clamp((age - windup - release) / recovery, 0, 1)
-                    track:AdjustWeight(1 - returning * returning * (3 - 2 * returning), 0.025)
-
-                    if seek_attack or math.abs(track.TimePosition - target) > 0.012 then
-                        track.TimePosition = target
-                    end
-                end
+            if track == binding.playback.active_track then
+                base_speed = UpdateAttackPlayback(binding, track, move, now, seek_attack)
             end
 
             if name == "GetUp" and binding.character:GetAttribute("CombatState") == "GettingUp" and track.Length > 0 and binding.clock.getup_stall_age < ANIMATION_STALL_SECONDS then
@@ -708,8 +718,7 @@ local function UpdateAnimations(binding, delta_time)
     UpdateLocomotion(binding, state, movement_speed)
 end
 
-local function UpdateState(binding)
-    local state = binding.character:GetAttribute("CombatState") or "Idle"
+local function UpdateDownedState(binding, state)
     local down = state == "Knockdown" or state == "Knockout" or (state == "BoutOver" and (binding.downed.knockdown_active or (binding.character:GetAttribute("CombatHealth") or 1) <= 0))
     if down and not binding.downed.knockdown_active then
         binding.downed.knockdown_age = math.max(0, binding.character:GetAttribute("KnockdownAgeFrames") or 0) / SIMULATION_HZ
@@ -741,6 +750,11 @@ local function UpdateState(binding)
             binding.tracks.GetUp:Stop(0.08)
         end
     end
+end
+
+local function UpdateState(binding)
+    local state = binding.character:GetAttribute("CombatState") or "Idle"
+    UpdateDownedState(binding, state)
 
     local perfect_stun = state == "Stunned" and binding.character:GetAttribute("StunReason") == "PerfectDodge"
 

@@ -29,8 +29,12 @@ function Feedback.Initialize()
 
     local npc = FindOpponent()
 
+    local function IsCurrentCharacter(character)
+        return character.Parent ~= nil and (character == player.Character or character == FindOpponent())
+    end
+
     local function WatchCharacter(character: Model)
-        if not character.Parent then
+        if not IsCurrentCharacter(character) then
             return
         end
         -- Discard older yielding binds if appearance or character setup starts again.
@@ -42,15 +46,15 @@ function Feedback.Initialize()
         end
 
         local humanoid = character:WaitForChild("Humanoid", 10)
-        if not humanoid or not character.Parent or character_versions[character] ~= version then
+        if not humanoid or not IsCurrentCharacter(character) or character_versions[character] ~= version then
             return
         end
         local animator = humanoid:WaitForChild("Animator", 10)
-        if not animator or not character.Parent or character_versions[character] ~= version then
+        if not animator or not IsCurrentCharacter(character) or character_versions[character] ~= version then
             return
         end
         local root = character:WaitForChild("HumanoidRootPart", 10)
-        if not root or not character.Parent or character_versions[character] ~= version then
+        if not root or not IsCurrentCharacter(character) or character_versions[character] ~= version then
             return
         end
 
