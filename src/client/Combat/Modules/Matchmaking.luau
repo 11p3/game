@@ -12,6 +12,8 @@ function Matchmaking.Initialize()
     local Invites = require(script.Parent.Invites)
     local MapVoting = require(script.Parent.MapVoting)
     local MoveGuide = require(script.Parent.MoveGuide)
+    local StylePreviews = require(script.Parent.StylePreviews)
+    local MenuSettings = require(script.Parent.MenuSettings)
     local Cinematics = require(script.Parent.Cinematics)
 
     local menu = player:WaitForChild("PlayerGui"):WaitForChild("Matchmaking")
@@ -40,24 +42,7 @@ function Matchmaking.Initialize()
     local latest_result_epoch = 0
     local result_panel = menu:WaitForChild("Scorecard")
     local selected_style = "Boxing"
-    local previews = {}
-    local preview_characters = {}
-
-    for _, card in styles_panel.StyleList:GetChildren() do
-        local style_id = card:GetAttribute("StyleId")
-
-        if card:IsA("TextButton") and Styles[style_id] then
-            previews[style_id] = {card.Preview, styles_panel.FighterPreview[style_id], styles_panel.OpponentPreview[style_id]}
-
-            for _, preview in previews[style_id] do
-                local camera = preview:FindFirstChild("Camera") or Instance.new("Camera")
-                camera.Name = "Camera"
-                camera.FieldOfView = 35
-                camera.Parent = preview
-                preview.CurrentCamera = camera
-            end
-        end
-    end
+    local previews = StylePreviews.New(styles_panel)
 
     local matchmaking = shared.Remotes.Matchmaking
 
@@ -140,92 +125,8 @@ function Matchmaking.Initialize()
     end
 
     local function RefreshStylePreview()
-        if not styles_open then
-            return
-        end
-
-        local selection = Invites.GetSession()
-        local left_player = selection and Players:GetPlayerByUserId(selection.fighters[1].user_id) or player
-        local right_player = selection and Players:GetPlayerByUserId(selection.fighters[2].user_id)
-
-        for style_id, style_previews in previews do
-            for index, preview in style_previews do
-                local owner = if index == 1 then player elseif index == 2 then left_player else right_player
-                local character = owner and owner.Character
-
-                if preview_characters[preview] == character then
-                    continue
-                end
-                preview_characters[preview] = nil
-                for _, child in preview.WorldModel:GetChildren() do
-                    child:Destroy()
-                end
-
-                if not character or not character:GetAttribute("AppearanceReady") then
-                    continue
-                end
-
-                local archivable = character.Archivable
-                character.Archivable = true
-                local model = character:Clone()
-                character.Archivable = archivable
-
-                if not model then
-                    continue
-                end
-
-                for _, item in model:GetDescendants() do
-                    if item:IsA("BaseScript") or item:IsA("ForceField") or item:IsA("Highlight") then
-                        item:Destroy()
-                    end
-                    if item:IsA("BasePart") then
-                        item.Anchored = item.Name == "HumanoidRootPart"
-                        item.CanCollide = false
-                    end
-                end
-
-                model.Parent = preview.WorldModel
-                model:PivotTo(CFrame.Angles(0, if index == 2 then -0.2 elseif index == 3 then 0.2 else 0, 0))
-                preview_characters[preview] = character
-
-                local humanoid = model:FindFirstChildOfClass("Humanoid")
-                local profile = shared.Animations:FindFirstChild(Styles[style_id].FighterId)
-                local idle = profile and profile:FindFirstChild("IdleAnimation")
-
-                if not idle or idle.AnimationId == "" then
-                    idle = shared.Animations.Boxing.IdleAnimation
-                end
-
-                if humanoid and idle and idle.AnimationId ~= "" then
-                    humanoid.AutoRotate = false
-                    humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-
-                    local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-                    local loaded, track = pcall(function() return animator:LoadAnimation(idle) end)
-
-                    if loaded then
-                        track.Priority = Enum.AnimationPriority.Idle
-                        track.Looped = true
-                        track:Play(0)
-                    end
-                end
-
-                local bounds, size = model:GetBoundingBox()
-                local center = bounds.Position
-                local aspect = math.max(0.1, preview.AbsoluteSize.X / math.max(preview.AbsoluteSize.Y, 1))
-                local tangent = math.tan(math.rad(preview.CurrentCamera.FieldOfView * 0.5))
-                local distance = math.max(size.Y, size.X / aspect) * 0.58 / tangent
-
-                if preview.Parent:IsA("TextButton") then
-                    local root = model:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        center = root.Position + Vector3.new(0, 0.8, 0)
-                    end
-                    distance = 5.6
-                end
-
-                preview.CurrentCamera.CFrame = CFrame.lookAt(center + Vector3.new(0, size.Y * 0.04, -distance), center)
-            end
+        if styles_open then
+            previews:Refresh(Invites.GetSession())
         end
     end
 
@@ -637,58 +538,10 @@ function Matchmaking.Initialize()
     player:GetAttributeChangedSignal("MatchStatus"):Connect(UpdateMenu)
     UpdateMenu()
 
-    local settings = shared.Remotes:WaitForChild("Settings")
-    local camera_button = settings_panel.CameraMode
-    local movement_button = settings_panel.MovementKeys
-    local hitbox_button = settings_panel.ShowHitboxes
-
-    local function RefreshSettings()
-        local camera_mode = player:GetAttribute("CameraMode") or "Behind"
-        local movement_keys = player:GetAttribute("MovementKeys") or "Camera"
-
-        folder:SetAttribute("CameraMode", camera_mode)
-        folder:SetAttribute("MovementKeys", movement_keys)
-        folder:SetAttribute("ShowHitboxes", player:GetAttribute("ShowHitboxes") == "On")
-        local data_status = player:GetAttribute("DataStatus")
-        local ready = data_status == "Ready" or data_status == "Studio"
-        hitbox_button.Active = ready
-        hitbox_button.AutoButtonColor = ready
-        hitbox_button.Text = if data_status == "Loading" then "Hitboxes: Loading..." elseif not ready then "Hitboxes: Unavailable" else "Hitboxes: " .. (player:GetAttribute("ShowHitboxes") or "Off")
-        camera_button.Active = ready
-        camera_button.AutoButtonColor = ready
-        movement_button.Active = ready
-        movement_button.AutoButtonColor = ready
-        camera_button.Text = if data_status == "Loading" then "Camera: Loading..." elseif not ready then "Camera: Unavailable" else "Camera: " .. camera_mode
-        movement_button.Text = if data_status == "Loading" then "Movement: Loading..." elseif not ready then "Movement: Unavailable" else "Movement: " .. (if movement_keys == "Camera" then "Follow camera" elseif movement_keys == "WS" then "W / S" else "A / D")
-    end
-
-    camera_button.Activated:Connect(function()
-        if player:GetAttribute("MatchStatus") == "Fighting" then
-            return
-        end
-        settings:FireServer("CameraMode", if player:GetAttribute("CameraMode") == "Behind" then "Side" else "Behind")
-    end)
-
-    movement_button.Activated:Connect(function()
-        if player:GetAttribute("MatchStatus") == "Fighting" then
-            return
-        end
-        local current = player:GetAttribute("MovementKeys")
-        settings:FireServer("MovementKeys", if current == "Camera" then "WS" elseif current == "WS" then "AD" else "Camera")
-    end)
-
-    hitbox_button.Activated:Connect(function()
-        if player:GetAttribute("MatchStatus") == "Fighting" then return end
-        settings:FireServer("ShowHitboxes", if player:GetAttribute("ShowHitboxes") == "On" then "Off" else "On")
-    end)
-
-    for _, attribute in {"CameraMode", "MovementKeys", "ShowHitboxes", "DataStatus"} do
-        player:GetAttributeChangedSignal(attribute):Connect(RefreshSettings)
-    end
+    MenuSettings.Initialize(settings_panel, folder)
     for _, attribute in {"DataStatus", "DataSaveState", "ResultSaveState", "PvPWins", "PvPLosses", "PvPDraws"} do
         player:GetAttributeChangedSignal(attribute):Connect(UpdateMenu)
     end
-    RefreshSettings()
 end
 
 return Matchmaking

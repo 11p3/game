@@ -182,17 +182,18 @@ function RollbackSession:StepFrame()
         end
     end
 
-    local resolved = RollbackSession.Copy(input)
+    -- Commands contain only scalars; nested fight state still needs deep copies.
+    local resolved = table.clone(input)
 
     self.used_inputs[frame] = resolved
     debug.profilebegin("Combat.SimulationStep")
-    self.step_function(self.state, RollbackSession.Copy(resolved), self.config)
+    self.step_function(self.state, table.clone(resolved), self.config)
     debug.profileend()
     self.state.frame = frame
     self.frame = frame
     self.last_input = RollbackSession.Predict(resolved)
     self.history[frame] = RollbackSession.Copy(self.state)
-    self.held_inputs[frame] = RollbackSession.Copy(self.last_input)
+    self.held_inputs[frame] = table.clone(self.last_input)
     self:Trim()
 end
 

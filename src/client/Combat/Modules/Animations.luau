@@ -1,5 +1,58 @@
 local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Animations = {}
+
+type PlaybackMode = "Natural" | "Phased" | "Feint"
+type PlaybackState = {active_kind: string, move_direction: number, waiting_action: boolean, active_track: AnimationTrack?, paired_track: AnimationTrack?}
+type ActionState = {
+    active_jab_mode: PlaybackMode,
+    active_jab_startup: number,
+    active_action_start: number,
+    active_jab_event: string?,
+    jab_sound_event: string?,
+    jab_sound_pending: boolean,
+    resume_attack: boolean,
+    resume_dodge: boolean,
+    perfect_action_until: number,
+    perfect_action_speed: number,
+    perfect_action_track: AnimationTrack?,
+    previous_state: string,
+    takedown_event: string?,
+    dodge_event: string?
+}
+type PairState = {paired_key: string?, finished_pair_key: string?, paired_track: AnimationTrack?}
+type DownedState = {
+    knocked_out_started: boolean,
+    knocked_out_pair_key: string?,
+    knocked_out_load_age: number,
+    knocked_out_retries: number,
+    fallback_knocked_out: Animation?,
+    knockdown_active: boolean,
+    knockdown_age: number,
+    fall_load_age: number
+}
+type PlaybackClock = {last_attack_age: number, attack_stall_age: number, last_paired_age: number, paired_stall_age: number, last_getup_age: number, getup_stall_age: number, paired_load_age: number}
+type Binding = {
+    character: Model,
+    animator: Animator,
+    player: Player,
+    humanoid: Humanoid,
+    folder: Instance,
+    arena: Instance,
+    combat_effects: BindableEvent,
+    rollback_effects: BindableEvent,
+    is_player: boolean,
+    alive: boolean,
+    tracks: {[string]: AnimationTrack?},
+    jab_tracks: {AnimationTrack},
+    character_connections: {RBXScriptConnection | FighterPresentation.Connection},
+    playback: PlaybackState,
+    action: ActionState,
+    pair: PairState,
+    downed: DownedState,
+    clock: PlaybackClock,
+    clinch: {last_escape: number, clinch_tracks: {[string]: AnimationTrack?}}
+}
+
 local SIMULATION_HZ = 60
 local TRACK_END_EPSILON = 0.001 -- Seek just inside a clip so reaching its exact endpoint does not stop the track.
 local TRACK_WEIGHT_EPSILON = 0.001
@@ -34,6 +87,17 @@ local MAX_KNOCKED_OUT_RETRIES = 3 -- Retry delayed assets without starting an en
 local DEFAULT_KNOCKED_OUT_ANIMATION_ID = "rbxassetid://114741358713606"
 local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
+local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, Sidestep = true, ClinchHeld = true, ClinchEscape = true})
+
+local function NumberAttribute(character: Model, name: string, fallback: number): number
+    local value = character:GetAttribute(name)
+    return if type(value) == "number" then value else fallback
+end
+
+local function StringAttribute(character: Model, name: string): string?
+    local value = character:GetAttribute(name)
+    return if type(value) == "string" then value else nil
+end
 
 local function GetContactTime(track: AnimationTrack?): number?
     -- Ignore contact metadata left over from a different animation asset.
@@ -207,7 +271,7 @@ local function LoadTracks(fighter_id: string, animator: Animator): ({[string]: A
     return tracks, jab_tracks
 end
 
-local function PlayKnockedOut(binding)
+local function PlayKnockedOut(binding: Binding)
     if not binding.downed.knocked_out_started then
         binding.downed.knocked_out_started = true
         binding.downed.knocked_out_pair_key = binding.pair.paired_key or binding.pair.finished_pair_key
@@ -237,12 +301,14 @@ local function PlayKnockedOut(binding)
 
     binding.downed.knocked_out_retries += 1
     binding.downed.knocked_out_load_age = 0
-    if not binding.downed.fallback_knocked_out then
-        binding.downed.fallback_knocked_out = Instance.new("Animation")
-        binding.downed.fallback_knocked_out.Name = "KnockedOutAnimation"
-        binding.downed.fallback_knocked_out.AnimationId = DEFAULT_KNOCKED_OUT_ANIMATION_ID
+    local fallback = binding.downed.fallback_knocked_out
+    if not fallback then
+        fallback = Instance.new("Animation")
+        fallback.Name = "KnockedOutAnimation"
+        fallback.AnimationId = DEFAULT_KNOCKED_OUT_ANIMATION_ID
+        binding.downed.fallback_knocked_out = fallback
     end
-    local loaded, replacement = pcall(function() return binding.animator:LoadAnimation(binding.downed.fallback_knocked_out) end)
+    local loaded, replacement = pcall(function() return binding.animator:LoadAnimation(fallback) end)
     if loaded then
         binding.tracks.KnockedOut = replacement
         replacement.Priority = Enum.AnimationPriority.Action3
@@ -251,12 +317,12 @@ local function PlayKnockedOut(binding)
     end
 end
 
-local function UpdateClinch(binding)
-    local role = binding.character:GetAttribute("ClinchRole") or ""
-    local escaping = binding.character:GetAttribute("ClinchEscapeUntil") or 0
+local function UpdateClinch(binding: Binding)
+    local role = StringAttribute(binding.character, "ClinchRole") or ""
+    local escaping = NumberAttribute(binding.character, "ClinchEscapeUntil", 0)
     local fighting = binding.arena:GetAttribute("MatchState") == "Fighting"
 
-    local clinch_profile = animations:FindFirstChild(binding.character:GetAttribute("ClinchFighterId") or "")
+    local clinch_profile = animations:FindFirstChild(StringAttribute(binding.character, "ClinchFighterId") or "")
 
     for name, wanted in {ClinchHold = "Control", ClinchHeld = "Held"} do
         local track
@@ -310,16 +376,16 @@ local function UpdateClinch(binding)
     binding.clinch.last_escape = escaping
 end
 
-local function UpdatePaired(binding)
-    local key = binding.character:GetAttribute("PairedAnimationEventId") or ""
+local function UpdatePaired(binding: Binding)
+    local key = StringAttribute(binding.character, "PairedAnimationEventId") or ""
     if key ~= "" and key == binding.pair.finished_pair_key then return end
     if binding.downed.knocked_out_started then
         if key == "" or key == binding.downed.knocked_out_pair_key then return end
         binding.downed.knocked_out_started = false
         if binding.tracks.KnockedOut then binding.tracks.KnockedOut:Stop(KNOCKDOWN_BLEND) end
     end
-    local name = binding.character:GetAttribute("PairedAnimation") or ""
-    local age = binding.character:GetAttribute("PairedAnimationAgeFrames") or -1
+    local name = StringAttribute(binding.character, "PairedAnimation") or ""
+    local age = NumberAttribute(binding.character, "PairedAnimationAgeFrames", -1)
 
     if key == "" or name == "" then
         binding.pair.finished_pair_key = nil
@@ -357,13 +423,13 @@ local function UpdatePaired(binding)
     UpdateClinch(binding)
 end
 
-local function PlayPunchRelease(binding)
+local function PlayPunchRelease(binding: Binding)
     if not binding.action.jab_sound_pending then
         return
     end
 
-    local state = binding.character:GetAttribute("CombatState")
-    local age = binding.character:GetAttribute("AttackAgeFrames") or -1
+    local state = StringAttribute(binding.character, "CombatState")
+    local age = NumberAttribute(binding.character, "AttackAgeFrames", -1)
 
     if state ~= "AttackStartup" and state ~= "AttackActive" and state ~= "AttackRecovery" then
         binding.action.jab_sound_pending = false
@@ -374,8 +440,8 @@ local function PlayPunchRelease(binding)
     if age >= binding.action.active_jab_startup then
         binding.action.jab_sound_pending = false
 
-        if age <= binding.action.active_jab_startup + (binding.character:GetAttribute("AttackActiveFrames") or CombatSimulation.JabActiveFrames) + 6 then
-            local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", binding.playback.active_kind)
+        if age <= binding.action.active_jab_startup + (NumberAttribute(binding.character, "AttackActiveFrames", CombatSimulation.JabActiveFrames)) + 6 then
+            local move = MoveDefinitions.Get(StringAttribute(binding.character, "FighterId") or "Boxing", binding.playback.active_kind)
             local release = move and move.feedback.Release
             if release then
                 Audio.Play(release.sound, release.volume, release.pitch, binding.action.jab_sound_event)
@@ -384,14 +450,14 @@ local function PlayPunchRelease(binding)
     end
 end
 
-local function PlayJab(binding, sequence: number, resuming: boolean?)
-    local event_id = binding.character:GetAttribute("AttackEventId")
+local function PlayJab(binding: Binding, sequence: number, resuming: boolean?)
+    local event_id = StringAttribute(binding.character, "AttackEventId")
     if event_id and event_id == binding.action.active_jab_event then
         return
     end
 
-    local kind = binding.character:GetAttribute("AttackKind") or "Jab"
-    local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", kind)
+    local kind = StringAttribute(binding.character, "AttackKind") or "Jab"
+    local move = MoveDefinitions.Get(StringAttribute(binding.character, "FighterId") or "Boxing", kind)
     local track = move and (binding.tracks[move.animation] or binding.tracks[move.animation_fallback])
 
     if not track and move and (move.animation == "Jab" or move.animation_fallback == "Jab") and #binding.jab_tracks > 0 then
@@ -415,7 +481,7 @@ local function PlayJab(binding, sequence: number, resuming: boolean?)
         return
     end
     binding.playback.active_track.Priority = if move and (move.grab or move.clinch_only) then Enum.AnimationPriority.Action2 else Enum.AnimationPriority.Action
-    binding.action.active_jab_startup = binding.character:GetAttribute("JabStartupFrames") or CombatSimulation.OpeningStartup
+    binding.action.active_jab_startup = NumberAttribute(binding.character, "JabStartupFrames", CombatSimulation.OpeningStartup)
     local contact = GetContactTime(track)
     local timed_action = binding.action.active_jab_mode == "Natural" and contact and move and not move.victim_animation
     binding.action.active_action_start = if timed_action and not move.lunge then math.max(0, binding.action.active_jab_startup / SIMULATION_HZ - contact) else 0
@@ -423,10 +489,10 @@ local function PlayJab(binding, sequence: number, resuming: boolean?)
     if not binding.playback.waiting_action then
         binding.playback.active_track:Play(0.025, 1, if move and (binding.action.active_jab_mode == "Phased" or binding.action.active_jab_mode == "Feint") then 0 else Cinematics.TimeScale)
         if move and move.victim_animation and binding.playback.active_track.Length > 0 then
-            binding.playback.active_track.TimePosition = math.clamp((binding.character:GetAttribute("PairedAnimationAgeFrames") or 0) / SIMULATION_HZ, 0, binding.playback.active_track.Length - TRACK_END_EPSILON)
+            binding.playback.active_track.TimePosition = math.clamp((NumberAttribute(binding.character, "PairedAnimationAgeFrames", 0)) / SIMULATION_HZ, 0, binding.playback.active_track.Length - TRACK_END_EPSILON)
         end
     end
-    binding.action.jab_sound_pending = not (move and move.feint) and (not resuming or (binding.character:GetAttribute("AttackAgeFrames") or 0) < binding.action.active_jab_startup)
+    binding.action.jab_sound_pending = not (move and move.feint) and (not resuming or (NumberAttribute(binding.character, "AttackAgeFrames", 0)) < binding.action.active_jab_startup)
     binding.action.jab_sound_event = event_id
     PlayPunchRelease(binding)
 
@@ -435,14 +501,14 @@ local function PlayJab(binding, sequence: number, resuming: boolean?)
     end
 end
 
-local function UpdateStun(binding)
+local function UpdateStun(binding: Binding)
     local track = binding.tracks.Stun
     if not track then
         return
     end
 
-    local state = binding.character:GetAttribute("CombatState")
-    local reason = binding.character:GetAttribute("StunReason")
+    local state = StringAttribute(binding.character, "CombatState")
+    local reason = StringAttribute(binding.character, "StunReason")
     local exhausted = state == "Stunned" and reason == "Exhausted"
     local followthrough = reason == "PerfectDodge" and os.clock() < binding.action.perfect_action_until and binding.action.perfect_action_track and binding.action.perfect_action_track.IsPlaying
     local reaction = FighterPresentation.Reaction(state, reason, binding.pair.paired_key ~= nil and binding.pair.paired_track ~= nil)
@@ -473,7 +539,7 @@ local function UpdateStun(binding)
     end
 end
 
-local function UpdateDowned(binding, delta_time, logical_paired_age)
+local function UpdateDowned(binding: Binding, delta_time, logical_paired_age)
     if binding.pair.paired_key and binding.pair.paired_track then
         binding.clock.paired_load_age += delta_time
         local length = binding.pair.paired_track.Length
@@ -482,8 +548,8 @@ local function UpdateDowned(binding, delta_time, logical_paired_age)
         local unavailable = length <= 0 and binding.clock.paired_load_age >= FALL_LOAD_TIMEOUT
         if ended or unavailable then
             binding.pair.finished_pair_key = binding.pair.paired_key
-            local state = binding.character:GetAttribute("CombatState")
-            if binding.downed.knockdown_active or (state == "Stunned" and binding.character:GetAttribute("StunReason") == "Takedown") then
+            local state = StringAttribute(binding.character, "CombatState")
+            if binding.downed.knockdown_active or (state == "Stunned" and StringAttribute(binding.character, "StunReason") == "Takedown") then
                 PlayKnockedOut(binding)
             else
                 binding.pair.paired_track:Stop(KNOCKDOWN_BLEND)
@@ -510,18 +576,18 @@ local function UpdateDowned(binding, delta_time, logical_paired_age)
             down:Play(0.03, 1, Cinematics.TimeScale)
             if down.Length > 0 then down.TimePosition = math.clamp(binding.downed.knockdown_age, 0, down.Length - TRACK_END_EPSILON) end
         end
-    elseif binding.downed.knocked_out_started and binding.character:GetAttribute("CombatState") == "Stunned" and binding.character:GetAttribute("StunReason") == "Takedown" then
+    elseif binding.downed.knocked_out_started and StringAttribute(binding.character, "CombatState") == "Stunned" and StringAttribute(binding.character, "StunReason") == "Takedown" then
         PlayKnockedOut(binding)
     end
 
 end
 
-local function UpdateAttackPlayback(binding, track: AnimationTrack, move, now: number, seek_attack: boolean?): number
+local function UpdateAttackPlayback(binding: Binding, track: AnimationTrack, move, now: number, seek_attack: boolean?): number
     local base_speed = 1
 
     if track.Length > 0 and move and binding.action.active_jab_mode == "Natural" and not move.victim_animation and binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until then
         local contact = GetContactTime(track)
-        local age = (binding.character:GetAttribute("AttackAgeFrames") or -1) / SIMULATION_HZ
+        local age = (NumberAttribute(binding.character, "AttackAgeFrames", -1)) / SIMULATION_HZ
         if contact and age >= 0 then
             local windup = binding.action.active_jab_startup / SIMULATION_HZ
             local position: number
@@ -545,13 +611,13 @@ local function UpdateAttackPlayback(binding, track: AnimationTrack, move, now: n
     end
 
     if track.Length > 0 and move and (binding.action.active_jab_mode == "Phased" or binding.action.active_jab_mode == "Feint") then
-        local state = binding.character:GetAttribute("CombatState")
+        local state = StringAttribute(binding.character, "CombatState")
 
         if binding.clock.attack_stall_age < ANIMATION_STALL_SECONDS and now >= binding.action.perfect_action_until and (state == "AttackStartup" or state == "AttackActive" or state == "AttackRecovery") then
-            local age = (binding.character:GetAttribute("AttackAgeFrames") or 0) / SIMULATION_HZ
+            local age = (NumberAttribute(binding.character, "AttackAgeFrames", 0)) / SIMULATION_HZ
             local windup = binding.action.active_jab_startup / SIMULATION_HZ
-            local release = (binding.character:GetAttribute("AttackActiveFrames") or CombatSimulation.JabActiveFrames) / SIMULATION_HZ
-            local recovery = math.clamp((binding.character:GetAttribute("AttackRecoveryFrames") or 18) / SIMULATION_HZ, 0.08, 0.32)
+            local release = (NumberAttribute(binding.character, "AttackActiveFrames", CombatSimulation.JabActiveFrames)) / SIMULATION_HZ
+            local recovery = math.clamp((NumberAttribute(binding.character, "AttackRecoveryFrames", 18)) / SIMULATION_HZ, 0.08, 0.32)
             local contact = GetContactTime(track) or track.Length * 0.4
             local release_end = math.min(track.Length - TRACK_END_EPSILON, contact + math.min(1 / 30, math.max(0, track.Length - contact) * 0.5))
             local position: number
@@ -587,11 +653,11 @@ local function UpdateAttackPlayback(binding, track: AnimationTrack, move, now: n
     return base_speed
 end
 
-local function UpdatePlayback(binding, now: number, movement_speed: number, logical_paired_age: number, seek_attack: boolean?)
-    local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", binding.playback.active_kind)
+local function UpdatePlayback(binding: Binding, now: number, movement_speed: number, logical_paired_age: number, seek_attack: boolean?)
+    local move = MoveDefinitions.Get(StringAttribute(binding.character, "FighterId") or "Boxing", binding.playback.active_kind)
 
     for name, track in binding.tracks do
-        if track.IsPlaying then
+        if track and track.IsPlaying then
             local base_speed = if name == "Move" then (if movement_speed <= 0.1 then 0 elseif binding.playback.move_direction < 0 then -1 else 1) else 1
 
             if track == binding.pair.paired_track then
@@ -600,7 +666,7 @@ local function UpdatePlayback(binding, now: number, movement_speed: number, logi
                     track.TimePosition = age
                 end
             elseif track == binding.playback.active_track and move and move.victim_animation and track.Length > 0 then
-                local age = (binding.character:GetAttribute("PairedAnimationAgeFrames") or -1) / SIMULATION_HZ
+                local age = (NumberAttribute(binding.character, "PairedAnimationAgeFrames", -1)) / SIMULATION_HZ
                 if binding.clock.paired_stall_age < ANIMATION_STALL_SECONDS and age >= 0 and age < track.Length - TRACK_END_EPSILON and math.abs(track.TimePosition - age) > RESUME_SEEK_TOLERANCE then
                     track.TimePosition = math.clamp(age, 0, track.Length - TRACK_END_EPSILON)
                 end
@@ -610,9 +676,9 @@ local function UpdatePlayback(binding, now: number, movement_speed: number, logi
                 base_speed = UpdateAttackPlayback(binding, track, move, now, seek_attack)
             end
 
-            if name == "GetUp" and binding.character:GetAttribute("CombatState") == "GettingUp" and track.Length > 0 and binding.clock.getup_stall_age < ANIMATION_STALL_SECONDS then
-                local duration = math.max(0.1, (binding.character:GetAttribute("GetUpDurationFrames") or CombatSimulation.GetUpFrames) / SIMULATION_HZ - 0.05)
-                local age = math.max(0, binding.character:GetAttribute("GetUpAgeFrames") or 0) / SIMULATION_HZ
+            if name == "GetUp" and StringAttribute(binding.character, "CombatState") == "GettingUp" and track.Length > 0 and binding.clock.getup_stall_age < ANIMATION_STALL_SECONDS then
+                local duration = math.max(0.1, (NumberAttribute(binding.character, "GetUpDurationFrames", CombatSimulation.GetUpFrames)) / SIMULATION_HZ - 0.05)
+                local age = math.max(0, NumberAttribute(binding.character, "GetUpAgeFrames", 0)) / SIMULATION_HZ
                 base_speed = track.Length / duration
                 local position = math.clamp(age * base_speed, 0, track.Length - TRACK_END_EPSILON)
                 if math.abs(track.TimePosition - position) > 0.04 then
@@ -631,7 +697,7 @@ local function UpdatePlayback(binding, now: number, movement_speed: number, logi
 
 end
 
-local function UpdateLocomotion(binding, state, movement_speed)
+local function UpdateLocomotion(binding: Binding, state, movement_speed)
     local mobile = binding.humanoid.Health > 0 and ((binding.arena:GetAttribute("MatchState") == "Fighting" and (state == "Idle" or state == "Guard" or state == "Blockstun")) or state == "Retreating")
     local moving = mobile and movement_speed > 0.1
     local track = binding.tracks.Move
@@ -646,7 +712,7 @@ local function UpdateLocomotion(binding, state, movement_speed)
                     track.TimePosition = math.max(0, track.Length - TRACK_END_EPSILON)
                 end
             end
-        elseif track.IsPlaying then
+        elseif track and track.IsPlaying then
             track:AdjustSpeed(0)
             track:Stop(0.08)
         end
@@ -657,17 +723,17 @@ local function UpdateLocomotion(binding, state, movement_speed)
     end
 end
 
-local function UpdateAnimations(binding, delta_time)
+local function UpdateAnimations(binding: Binding, delta_time)
     delta_time = math.clamp(delta_time or 0, 0, 0.1)
-    local movement_speed = binding.character:GetAttribute("CombatMoveSpeed") or 0
+    local movement_speed = NumberAttribute(binding.character, "CombatMoveSpeed", 0)
 
     if movement_speed > 0.1 then
-        binding.playback.move_direction = binding.character:GetAttribute("CombatMoveDirection") or 1
+        binding.playback.move_direction = NumberAttribute(binding.character, "CombatMoveDirection", 1)
     end
 
-    local logical_attack_age = binding.character:GetAttribute("AttackAgeFrames") or -1
-    local logical_paired_age = binding.character:GetAttribute("PairedAnimationAgeFrames") or -1
-    local logical_getup_age = binding.character:GetAttribute("GetUpAgeFrames") or -1
+    local logical_attack_age = NumberAttribute(binding.character, "AttackAgeFrames", -1)
+    local logical_paired_age = NumberAttribute(binding.character, "PairedAnimationAgeFrames", -1)
+    local logical_getup_age = NumberAttribute(binding.character, "GetUpAgeFrames", -1)
     binding.clock.attack_stall_age = if logical_attack_age >= 0 and logical_attack_age == binding.clock.last_attack_age then binding.clock.attack_stall_age + delta_time else 0
     binding.clock.paired_stall_age = if logical_paired_age >= 0 and logical_paired_age == binding.clock.last_paired_age then binding.clock.paired_stall_age + delta_time else 0
     binding.clock.getup_stall_age = if logical_getup_age >= 0 and logical_getup_age == binding.clock.last_getup_age then binding.clock.getup_stall_age + delta_time else 0
@@ -680,25 +746,25 @@ local function UpdateAnimations(binding, delta_time)
 
     if binding.action.resume_attack and waiting_track and waiting_track.Length > 0 then
         if binding.action.active_jab_mode == "Natural" and not GetContactTime(waiting_track) and not binding.playback.waiting_action then
-            local age = math.max(0, binding.character:GetAttribute("AttackAgeFrames") or 0) / SIMULATION_HZ
+            local age = math.max(0, NumberAttribute(binding.character, "AttackAgeFrames", 0)) / SIMULATION_HZ
             if age < waiting_track.Length then waiting_track.TimePosition = age else waiting_track:Stop(0) end
         end
         binding.action.resume_attack = false
     end
 
     if binding.action.resume_dodge and binding.tracks.Dodge and binding.tracks.Dodge.Length > 0 then
-        local age = math.max(0, binding.character:GetAttribute("DodgeAgeFrames") or 0) / SIMULATION_HZ
+        local age = math.max(0, NumberAttribute(binding.character, "DodgeAgeFrames", 0)) / SIMULATION_HZ
         if age < binding.tracks.Dodge.Length then binding.tracks.Dodge.TimePosition = age else binding.tracks.Dodge:Stop(0) end
         binding.action.resume_dodge = false
     end
 
     if waiting_track and binding.playback.waiting_action then
-        local age = (binding.character:GetAttribute("AttackAgeFrames") or -1) / SIMULATION_HZ
+        local age = (NumberAttribute(binding.character, "AttackAgeFrames", -1)) / SIMULATION_HZ
         if binding.clock.attack_stall_age >= ANIMATION_STALL_SECONDS and age >= 0 then age += binding.clock.attack_stall_age end
         local contact = GetContactTime(waiting_track)
         local start_at = if contact then binding.action.active_action_start else math.max(0, binding.action.active_jab_startup / SIMULATION_HZ - waiting_track.Length)
 
-        if waiting_track.Length > 0 and ((age >= 0 and age >= start_at) or (age < 0 and binding.character:GetAttribute("JabResult") == "Hit")) then
+        if waiting_track.Length > 0 and ((age >= 0 and age >= start_at) or (age < 0 and StringAttribute(binding.character, "JabResult") == "Hit")) then
             binding.playback.waiting_action = false
             waiting_track:Play(0.015, 1, Cinematics.TimeScale)
             if contact then
@@ -713,15 +779,15 @@ local function UpdateAnimations(binding, delta_time)
 
     UpdatePlayback(binding, now, movement_speed, logical_paired_age, seek_attack)
 
-    local state = binding.character:GetAttribute("CombatState")
+    local state = StringAttribute(binding.character, "CombatState")
     UpdateStun(binding)
     UpdateLocomotion(binding, state, movement_speed)
 end
 
-local function UpdateDownedState(binding, state)
-    local down = state == "Knockdown" or state == "Knockout" or (state == "BoutOver" and (binding.downed.knockdown_active or (binding.character:GetAttribute("CombatHealth") or 1) <= 0))
+local function UpdateDownedState(binding: Binding, state)
+    local down = state == "Knockdown" or state == "Knockout" or (state == "BoutOver" and (binding.downed.knockdown_active or (NumberAttribute(binding.character, "CombatHealth", 1)) <= 0))
     if down and not binding.downed.knockdown_active then
-        binding.downed.knockdown_age = math.max(0, binding.character:GetAttribute("KnockdownAgeFrames") or 0) / SIMULATION_HZ
+        binding.downed.knockdown_age = math.max(0, NumberAttribute(binding.character, "KnockdownAgeFrames", 0)) / SIMULATION_HZ
         binding.downed.knocked_out_started = false
         binding.downed.fall_load_age = 0
         binding.downed.knocked_out_load_age, binding.downed.knocked_out_retries = 0, 0
@@ -752,33 +818,34 @@ local function UpdateDownedState(binding, state)
     end
 end
 
-local function UpdateState(binding)
-    local state = binding.character:GetAttribute("CombatState") or "Idle"
+local function UpdateState(binding: Binding)
+    local state = StringAttribute(binding.character, "CombatState") or "Idle"
     UpdateDownedState(binding, state)
 
-    local perfect_stun = state == "Stunned" and binding.character:GetAttribute("StunReason") == "PerfectDodge"
+    local perfect_stun = state == "Stunned" and StringAttribute(binding.character, "StunReason") == "PerfectDodge"
 
-    local preserve_punch = perfect_stun and binding.playback.active_track and (binding.playback.active_track.IsPlaying or binding.playback.waiting_action)
+    local active_track = binding.playback.active_track
+    local preserve_punch = perfect_stun and active_track and (active_track.IsPlaying or binding.playback.waiting_action)
 
-    if preserve_punch then
+    if preserve_punch and active_track then
         if binding.playback.waiting_action then
             binding.playback.waiting_action = false
-            binding.playback.active_track:Play(0.025, 1, Cinematics.TimeScale)
+            active_track:Play(0.025, 1, Cinematics.TimeScale)
         end
         -- Let the missed punch follow through before blending into its stun pose.
         binding.action.perfect_action_until = os.clock() + PERFECT_HOLD
-        binding.action.perfect_action_track = binding.playback.active_track
-        binding.action.perfect_action_speed = math.max(MIN_FOLLOWTHROUGH_SPEED, (binding.playback.active_track.Length - binding.playback.active_track.TimePosition) / PERFECT_HOLD)
+        binding.action.perfect_action_track = active_track
+        binding.action.perfect_action_speed = math.max(MIN_FOLLOWTHROUGH_SPEED, (active_track.Length - active_track.TimePosition) / PERFECT_HOLD)
         task.delay(PERFECT_HOLD, function()
-            if binding.alive and binding.character.Parent and binding.character:GetAttribute("CombatState") == "Stunned" and binding.tracks.Stun then
+            if binding.alive and binding.character.Parent and StringAttribute(binding.character, "CombatState") == "Stunned" and binding.tracks.Stun then
                 UpdateStun(binding)
             end
         end)
     end
 
     if binding.tracks.ClinchRelease then
-        local move = MoveDefinitions.Get(binding.character:GetAttribute("FighterId") or "Boxing", binding.playback.active_kind)
-        local finishing_grapple = binding.playback.active_track and (binding.playback.active_track.IsPlaying or binding.playback.waiting_action) and move and (move.shove or move.takedown) and binding.character:GetAttribute("JabResult") == "Hit"
+        local move = MoveDefinitions.Get(StringAttribute(binding.character, "FighterId") or "Boxing", binding.playback.active_kind)
+        local finishing_grapple = binding.playback.active_track and (binding.playback.active_track.IsPlaying or binding.playback.waiting_action) and move and (move.shove or move.takedown) and StringAttribute(binding.character, "JabResult") == "Hit"
         if state == "ClinchRelease" and not finishing_grapple then
             binding.playback.waiting_action = false
             if binding.playback.active_track then
@@ -803,7 +870,7 @@ local function UpdateState(binding)
         end
     end
 
-    if state == "GettingUp" or state == "Hitstun" or state == "Knockout" or state == "Knockdown" or state == "Waiting" or state == "BoutOver" or state == "Stunned" or state == "HitReact" or state == "Retreating" or state == "Sidestep" or state == "ClinchHeld" or state == "ClinchEscape" then
+    if INTERRUPT_ACTION_STATES[state] then
         if binding.tracks.Dodge then
             binding.tracks.Dodge:Stop(0.03)
         end
@@ -825,7 +892,7 @@ local function UpdateState(binding)
     binding.action.previous_state = state
 end
 
-local function Cleanup(binding)
+local function Cleanup(binding: Binding)
     if not binding.alive then
         return
     end
@@ -834,22 +901,25 @@ local function Cleanup(binding)
         connection:Disconnect()
     end
     for _, track in binding.tracks do
-        track:Stop(0); track:Destroy()
+        if track then
+            track:Stop(0)
+            track:Destroy()
+        end
     end
     binding.playback.active_track = nil
     if binding.downed.fallback_knocked_out then binding.downed.fallback_knocked_out:Destroy() end
 end
 
-local function OnAttack(binding)
-    local sequence = binding.character:GetAttribute("JabSequence") or 0
+local function OnAttack(binding: Binding)
+    local sequence = NumberAttribute(binding.character, "JabSequence", 0)
 
     if sequence > 0 then
-        PlayJab(binding, binding.character:GetAttribute("JabVariant") or sequence)
+        PlayJab(binding, NumberAttribute(binding.character, "JabVariant", sequence))
     end
 end
 
-local function OnGetUp(binding)
-    if (binding.character:GetAttribute("GetUpSerial") or 0) <= 0 then
+local function OnGetUp(binding: Binding)
+    if (NumberAttribute(binding.character, "GetUpSerial", 0)) <= 0 then
         return
     end
 
@@ -871,10 +941,10 @@ local function OnGetUp(binding)
     end
 end
 
-local function OnHit(binding)
+local function OnHit(binding: Binding)
     if binding.tracks.TakedownReaction and not binding.character:GetAttribute("LastHitDodged") and not binding.pair.paired_key then
-        if binding.character:GetAttribute("LastHitTakedown") and binding.character:GetAttribute("CombatState") ~= "Knockdown" then
-            binding.action.takedown_event = binding.character:GetAttribute("LastHitPresentationEventId")
+        if binding.character:GetAttribute("LastHitTakedown") and StringAttribute(binding.character, "CombatState") ~= "Knockdown" then
+            binding.action.takedown_event = StringAttribute(binding.character, "LastHitPresentationEventId")
             binding.tracks.TakedownReaction.Priority = Enum.AnimationPriority.Action2
             binding.tracks.TakedownReaction:Play(0.03)
         else
@@ -897,7 +967,7 @@ local function OnHit(binding)
     end
 end
 
-local function OnCombatEvent(binding, event)
+local function OnCombatEvent(binding: Binding, event)
     if event.fighter ~= (if binding.is_player then (script.Parent.Parent:GetAttribute("FighterSlot") or 2) else 3 - (script.Parent.Parent:GetAttribute("FighterSlot") or 2)) then return end
 
     if event.kind == "Dodge" then
@@ -915,7 +985,7 @@ local function OnCombatEvent(binding, event)
     end
 end
 
-local function CorrectAnimations(binding, valid)
+local function CorrectAnimations(binding: Binding, valid)
     if next(valid) == nil then
         binding.playback.active_track = nil
         binding.playback.waiting_action = false
@@ -938,7 +1008,7 @@ local function CorrectAnimations(binding, valid)
         binding.downed.knockdown_age, binding.downed.fall_load_age = 0, 0
 
         for name, track in binding.tracks do
-            if name ~= "Idle" then
+            if name ~= "Idle" and track then
                 track:Stop(0.05)
             end
         end
@@ -996,52 +1066,47 @@ local function CorrectAnimations(binding, valid)
 
 end
 
-function Animations.Bind(character, animator)
-    local binding = {character = character, animator = animator, action = {}, pair = {}, downed = {}, clock = {}, clinch = {}}
+function Animations.Bind(character: Model, animator: Animator)
+    local player = game:GetService("Players").LocalPlayer
+    local folder = script.Parent.Parent
+    local tracks, jab_tracks = LoadTracks(StringAttribute(character, "FighterId") or "Boxing", animator)
+    local binding: Binding = {
+        character = character,
+        animator = animator,
+        player = player,
+        folder = folder,
+        arena = workspace:WaitForChild("Combat"):WaitForChild("Arena"),
+        humanoid = assert(character:FindFirstChildOfClass("Humanoid"), "Fighter is missing its Humanoid"),
+        combat_effects = folder:WaitForChild("CombatEffects") :: BindableEvent,
+        rollback_effects = folder:WaitForChild("RollbackEffects") :: BindableEvent,
+        is_player = character == player.Character,
+        alive = true,
+        tracks = tracks,
+        jab_tracks = jab_tracks,
+        character_connections = {},
+        playback = {active_kind = "Jab", move_direction = 1, waiting_action = false},
+        action = {
+            active_jab_mode = "Phased",
+            active_jab_startup = CombatSimulation.OpeningStartup,
+            active_action_start = 0,
+            jab_sound_pending = false,
+            resume_attack = false,
+            resume_dodge = false,
+            perfect_action_until = 0,
+            perfect_action_speed = 1,
+            previous_state = StringAttribute(character, "CombatState") or "Idle"
+        },
+        pair = {},
+        downed = {knockdown_active = false, knockdown_age = 0, fall_load_age = 0, knocked_out_started = false, knocked_out_load_age = 0, knocked_out_retries = 0},
+        clock = {paired_load_age = 0, last_attack_age = -1, attack_stall_age = 0, last_paired_age = -1, paired_stall_age = 0, last_getup_age = -1, getup_stall_age = 0},
+        clinch = {last_escape = 0, clinch_tracks = {}}
+    }
     local callbacks = {}
-    callbacks.UpdateClinch = function(...) UpdateClinch(binding, ...) end
-    callbacks.UpdatePaired = function(...) UpdatePaired(binding, ...) end
-    callbacks.PlayPunchRelease = function(...) PlayPunchRelease(binding, ...) end
-    callbacks.UpdateAnimations = function(...) UpdateAnimations(binding, ...) end
-    callbacks.UpdateState = function(...) UpdateState(binding, ...) end
-    binding.player = game:GetService("Players").LocalPlayer
-    binding.folder = script.Parent.Parent
-    binding.arena = workspace:WaitForChild("Combat"):WaitForChild("Arena")
-    binding.humanoid = binding.character:FindFirstChildOfClass("Humanoid")
-    binding.combat_effects = binding.folder:WaitForChild("CombatEffects")
-    binding.rollback_effects = binding.folder:WaitForChild("RollbackEffects")
-    binding.is_player = binding.character == binding.player.Character
-    binding.alive = true
-    binding.playback = {active_kind = "Jab", move_direction = 1, waiting_action = false}
-    binding.tracks, binding.jab_tracks = LoadTracks(binding.character:GetAttribute("FighterId") or "Boxing", binding.animator)
-
-    binding.action.active_jab_mode = "Phased"
-    binding.action.resume_attack = false
-    binding.action.resume_dodge = false
-    binding.downed.knockdown_active = false
-    binding.downed.knockdown_age = 0
-    binding.downed.fall_load_age = 0
-    binding.downed.knocked_out_started = false
-
-    binding.clock.paired_load_age = 0
-    binding.downed.knocked_out_load_age = 0
-    binding.downed.knocked_out_retries = 0
-
-    binding.clock.last_attack_age = -1
-    binding.clock.attack_stall_age = 0
-    binding.clock.last_paired_age = -1
-    binding.clock.paired_stall_age = 0
-    binding.clock.last_getup_age = -1
-    binding.clock.getup_stall_age = 0
-    binding.action.jab_sound_pending = false
-
-    binding.action.perfect_action_until = 0
-
-    binding.action.perfect_action_speed = 1
-    binding.action.active_jab_startup = CombatSimulation.OpeningStartup
-    binding.action.active_action_start = 0
-    binding.action.previous_state = binding.character:GetAttribute("CombatState") or "Idle"
-    binding.character_connections = {}
+    callbacks.UpdateClinch = function() UpdateClinch(binding) end
+    callbacks.UpdatePaired = function() UpdatePaired(binding) end
+    callbacks.PlayPunchRelease = function() PlayPunchRelease(binding) end
+    callbacks.UpdateAnimations = function(delta_time) UpdateAnimations(binding, delta_time) end
+    callbacks.UpdateState = function() UpdateState(binding) end
     local animate = binding.character:FindFirstChild("Animate")
 
     if animate then
@@ -1053,9 +1118,6 @@ function Animations.Bind(character, animator)
             track:Stop(0)
         end
     end
-
-    binding.clinch.last_escape = 0
-    binding.clinch.clinch_tracks = {}
 
     table.insert(binding.character_connections, FighterPresentation.Observe(binding.character, "ClinchFighterId", callbacks.UpdateClinch))
     table.insert(binding.character_connections, FighterPresentation.Observe(binding.character, "ClinchRole", callbacks.UpdateClinch))
@@ -1099,10 +1161,10 @@ function Animations.Bind(character, animator)
         CorrectAnimations(binding, valid)
     end))
 
-    local initial_state = binding.character:GetAttribute("CombatState") or "Idle"
+    local initial_state = StringAttribute(binding.character, "CombatState") or "Idle"
 
     if initial_state == "AttackStartup" or initial_state == "AttackActive" or initial_state == "AttackRecovery" then
-        PlayJab(binding, binding.character:GetAttribute("JabVariant") or binding.character:GetAttribute("JabSequence") or 1, true)
+        PlayJab(binding, NumberAttribute(binding.character, "JabVariant", NumberAttribute(binding.character, "JabSequence", 1)), true)
     elseif initial_state:sub(1, 5) == "Dodge" and binding.tracks.Dodge then
         binding.tracks.Dodge:Play(0.02, 1, Cinematics.TimeScale)
         binding.action.resume_dodge = true
