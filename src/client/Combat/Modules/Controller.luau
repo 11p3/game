@@ -20,6 +20,9 @@ function Controller.Initialize()
 
     local player = Players.LocalPlayer
     local arena = workspace:WaitForChild("Combat"):WaitForChild("Arena")
+    local menu = workspace.Combat:FindFirstChild("Menu")
+    local menu_anchor = menu and menu:FindFirstChild("CameraAnchor")
+    local menu_blur = game:GetService("Lighting"):FindFirstChild("MenuBlur")
 
     local function FindOpponent()
         local id = script.Parent.Parent:GetAttribute("OpponentUserId") or 0
@@ -133,6 +136,12 @@ function Controller.Initialize()
 
     local controlled_camera
     local camera_defaults
+    local menu_camera
+
+    if menu_anchor then
+        menu_anchor:GetPropertyChangedSignal("CFrame"):Connect(function() menu_camera = nil end)
+        menu_anchor.AttributeChanged:Connect(function() menu_camera = nil end)
+    end
 
     local function ReleaseCamera()
         if controlled_camera then
@@ -215,8 +224,21 @@ function Controller.Initialize()
         local arena_id = folder:GetAttribute("ArenaId")
         if not camera or not root or not root.Parent or not arena_id or arena_id == "" then
             if controlled_camera then ReleaseCamera() end
+            if camera and menu_anchor and menu_anchor.Parent then
+                if menu_camera ~= camera or camera.CameraType ~= Enum.CameraType.Scriptable then
+                    menu_camera = camera
+                    camera.CameraType = Enum.CameraType.Scriptable
+                    camera.CFrame = menu_anchor.CFrame
+                    camera.Focus = CFrame.new(menu_anchor:GetAttribute("Focus") or arena.Canvas.Position)
+                    camera.FieldOfView = menu_anchor:GetAttribute("FieldOfView") or 55
+                end
+                if menu_blur and not menu_blur.Enabled then menu_blur.Enabled = true end
+            end
             return
         end
+
+        menu_camera = nil
+        if menu_blur and menu_blur.Enabled then menu_blur.Enabled = false end
 
         if controlled_camera ~= camera then
             if controlled_camera then ReleaseCamera() end

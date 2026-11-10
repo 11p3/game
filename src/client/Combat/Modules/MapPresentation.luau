@@ -20,7 +20,7 @@ function MapPresentation.Initialize()
         lighting_defaults[property] = Lighting[property]
     end
     for _, effect in Lighting:GetChildren() do
-        if effect:IsA("PostEffect") then
+        if effect:IsA("PostEffect") and effect.Name ~= "MenuBlur" then
             effect_defaults[effect] = effect.Enabled
         end
     end
