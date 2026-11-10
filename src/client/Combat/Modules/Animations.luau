@@ -25,7 +25,6 @@ type DownedState = {
     knocked_out_pair_key: string?,
     knocked_out_load_age: number,
     knocked_out_retries: number,
-    fallback_knocked_out: Animation?,
     knockdown_active: boolean,
     knockdown_age: number,
     fall_load_age: number,
@@ -86,7 +85,6 @@ local FALL_LOAD_TIMEOUT = 1.5 -- Bound loading waits so a missing fall clip cann
 local KNOCKED_OUT_LOAD_TIMEOUT = 1.5
 local KNOCKED_OUT_RETRY_SECONDS = 0.5
 local MAX_KNOCKED_OUT_RETRIES = 3 -- Retry delayed assets without starting an endless loading loop.
-local DEFAULT_KNOCKED_OUT_ANIMATION_ID = "rbxassetid://114741358713606"
 local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
 local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, Sidestep = true, ClinchHeld = true, ClinchEscape = true, DodgeStartup = true, DodgeActive = true, DodgeRecovery = true})
@@ -311,16 +309,12 @@ local function PlayKnockedOut(binding: Binding)
     end
     if binding.downed.knocked_out_retries >= MAX_KNOCKED_OUT_RETRIES or binding.downed.knocked_out_load_age < KNOCKED_OUT_RETRY_SECONDS then return end
 
+    local animation = universal_animations:FindFirstChild("KnockedOutAnimation")
+    if not animation or not animation:IsA("Animation") or animation.AnimationId == "" then return end
+
     binding.downed.knocked_out_retries += 1
     binding.downed.knocked_out_load_age = 0
-    local fallback = binding.downed.fallback_knocked_out
-    if not fallback then
-        fallback = Instance.new("Animation")
-        fallback.Name = "KnockedOutAnimation"
-        fallback.AnimationId = DEFAULT_KNOCKED_OUT_ANIMATION_ID
-        binding.downed.fallback_knocked_out = fallback
-    end
-    local loaded, replacement = pcall(function() return binding.animator:LoadAnimation(fallback) end)
+    local loaded, replacement = pcall(function() return binding.animator:LoadAnimation(animation) end)
     if loaded then
         binding.tracks.KnockedOut = replacement
         replacement.Priority = Enum.AnimationPriority.Action3
@@ -919,7 +913,6 @@ local function Cleanup(binding: Binding)
         end
     end
     binding.playback.active_track = nil
-    if binding.downed.fallback_knocked_out then binding.downed.fallback_knocked_out:Destroy() end
 end
 
 local function OnAttack(binding: Binding)
