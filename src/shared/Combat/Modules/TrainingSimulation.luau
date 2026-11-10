@@ -42,7 +42,6 @@ function TrainingSimulation.Create(dummy_style)
 end
 
 function TrainingSimulation.Pack(input)
-    -- Use two bits per axis, then separate bits for action buttons.
     local value = (input.axis or 0) + 1 + ((input.strafe or 0) + 1) * 4
     for index, key in {"guard", "jab", "dodge", "special", "kick", "technique", "clinch"} do
         if input[key] == true then

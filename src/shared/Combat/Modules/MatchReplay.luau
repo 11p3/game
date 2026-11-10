@@ -9,16 +9,15 @@ local HttpService = game:GetService("HttpService")
 
 local MatchReplay = {}
 -- Refresh these fingerprints when simulation source changes.
-local SOURCE_HASHES = table.freeze({CombatSimulation = 2352403340, MatchSimulation = 104575513, AISimulation = 2281590776, TrainingSimulation = 4224684585, PairedActions = 2191544561, RollbackSession = 1395909891})
+local SOURCE_HASHES = table.freeze({CombatSimulation = 1979735868, MatchSimulation = 4081393253, AISimulation = 2281590776, TrainingSimulation = 2386897836, PairedActions = 2191544561, RollbackSession = 55258887})
 MatchReplay.SourceHashes = SOURCE_HASHES
 local HEADER_PREFIX_BYTES = 8
 local HEADER_LENGTH_OFFSET = 4
 local MIN_ARCHIVE_BYTES = 10
 local MAX_HEADER_BYTES = 524288 -- 512 KiB to bound archive parsing and checkpoint metadata.
 local MAX_ADVANCE_FRAMES = 600 -- At most ten seconds of replay work per advance call.
--- DJB2 constants for the same bounded checksum scheme as rollback.
-local HASH_SEED = 5381 -- Standard DJB2 starting seed, not a gameplay tuning value.
-local HASH_MULTIPLIER = 33 -- 32 + 1 is DJB2's mixing step, paired with the 5381 seed.
+local HASH_SEED = 5381 -- DJB2 seed.
+local HASH_MULTIPLIER = 33 -- DJB2 multiplies by 33 before adding each byte.
 local HASH_MODULUS = 4294967296 -- 2^32 wraps the rolling hash to an unsigned 32-bit value.
 local INPUT_SLOT_BYTES = 3 -- Two bytes for controls and one for a training command per player.
 local INPUT_FLAG_SHIFT = 3

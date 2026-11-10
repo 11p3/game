@@ -35,7 +35,6 @@ local function ClampPosition(config, x, z)
         local center_z = ((config.back_limit or -DEFAULT_RING_LIMIT) + (config.front_limit or DEFAULT_RING_LIMIT)) * 0.5
         local radius = math.min((config.right_limit - config.left_limit) * 0.5, ((config.front_limit or DEFAULT_RING_LIMIT) - (config.back_limit or -DEFAULT_RING_LIMIT)) * 0.5)
         local dx, dz = x - center_x, z - center_z
-        -- Clip the square corners along the octagon's diagonal boundaries.
         local excess = math.max(0, math.abs(dx) + math.abs(dz) - radius * math.sqrt(2)) * 0.5
 
         x -= math.sign(dx) * excess
@@ -431,7 +430,6 @@ function MatchSimulation.Step(state, input, config)
 
     Control(player, npc, input, 2)
 
-    -- Run the second player through the same controls as the first.
     if config.pvp then
         Control(npc, player, {axis = input.axis_one or 0, strafe = input.strafe_one or 0, guard = input.guard_one, jab = input.jab_one, dodge = input.dodge_one, sidestep = input.sidestep_one, special = input.special_one, kick = input.kick_one, technique = input.technique_one, clinch = input.clinch_one}, 1)
     end

@@ -1,8 +1,8 @@
 local TrainingSimulation = require(script.Parent.TrainingSimulation)
 
 local RollbackSession = {}
-local HASH_SEED = 5381 -- Standard DJB2 starting seed, not a gameplay tuning value.
-local HASH_MULTIPLIER = 33 -- 32 + 1 is DJB2's mixing step, paired with the 5381 seed.
+local HASH_SEED = 5381 -- DJB2 seed.
+local HASH_MULTIPLIER = 33 -- DJB2 multiplies by 33 before adding each byte.
 local HASH_MODULUS = 4294967296 -- 2^32 wraps the rolling hash to an unsigned 32-bit value.
 local HASH_BLOCK_BYTES = 4 -- Four-byte products stay below the exact-integer limit of 2^53.
 local HASH_BLOCK_MULTIPLIER = HASH_MULTIPLIER ^ HASH_BLOCK_BYTES
@@ -500,7 +500,7 @@ function RollbackSession:SubmitPlayer(frame: number, input, slot: number)
     local combined = RollbackSession.Copy(previous or self.used_inputs[frame] or RollbackSession.Predict(self.last_input))
 
     for _, key in INPUT_FIELDS do combined[key .. (if slot == 1 then "_one" else "")] = normalized[key] end
-    -- Keep accepted slot inputs separate so the other player can fill this frame.
+    -- Rebuild the combined frame without replacing either player's accepted input.
     self.player_inputs[slot][frame] = normalized
     self.inputs[frame] = nil
 

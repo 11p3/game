@@ -61,7 +61,6 @@ function MoveGuide.Open(style_id)
         row.NameLabel.Text = entry.Name
         row.Description.Text = entry.Description
         row.HowTo.Text = entry.Use
-        -- Read displayed costs from combat rules so the guide cannot drift from balance data.
         local move = entry.Move and Moves.Get(style.FighterId, entry.Move)
         local stamina = if move and move.chain_stamina then tostring(move.chain_stamina[1]) .. "–" .. tostring(move.chain_stamina[#move.chain_stamina]) elseif move then tostring(move.stamina) else ""
         row.Cost.Text = if move then stamina .. " STA" .. (if move.momentum then " · " .. move.momentum .. " MOM" else "") else ""

@@ -1,7 +1,7 @@
 local SnapshotCodec = {}
 local VERSION = 1
-local MAX_DEPTH = 24 -- Safety cap for corrupt nesting, not a measured engine recursion limit.
-local MAX_BYTES = 524288 -- Leave full-state headroom while bounding allocation from a malformed snapshot.
+local MAX_DEPTH = 24 -- Reject excessively nested snapshots.
+local MAX_BYTES = 524288 -- Allow full snapshots without unbounded allocation.
 type SnapshotValue = boolean | number | string | {[string | number]: SnapshotValue}
 
 local function Same(first, second)
@@ -60,7 +60,6 @@ function SnapshotCodec.Encode(value, baseline)
             buffer.writestring(data, offset + 3, item)
             offset += 3 + #item
         elseif type(item) == "table" then
-            -- Send only changes against the acknowledged baseline.
             local previous_table = if type(previous) == "table" then previous else nil
             local patch = previous_table ~= nil
             Reserve(3)

@@ -265,7 +265,6 @@ local LOCKED_PHASE = {movement = false, guard = false, dodge = false}
 local MAX_RESOURCE = 100
 local MAX_MOMENTUM = 3
 local MIN_HITBOX_SIZE = 0.001
--- Cap strike advances to three studs over at most half a second.
 local MAX_ADVANCE_DISTANCE = 3
 local MAX_ADVANCE_FRAMES = 30
 local INPUT_ACTIONS = {jab = true, special = true, kick = true, technique = true}
@@ -299,7 +298,6 @@ local function PrepareAI(profile)
     return plan
 end
 
--- Freeze nested rules so players, AI and replays cannot mutate shared definitions.
 local function Freeze(value)
     if table.isfrozen(value) then
         return value
@@ -406,7 +404,6 @@ local CLINCH_KNEE = {
     damage = 8, stamina = 10, block_cost = 35, momentum_gain = 0,
 }
 
--- Reject malformed authored rules before the shared runtime uses them.
 function MoveDefinitions.Validate(catalog, unnormalized)
     local issues = {}
 

@@ -3,7 +3,7 @@ export type Snapshot = {[string]: AttributeValue}
 export type Connection = {Disconnect: (Connection) -> ()}
 
 local FighterPresentation = {}
-local records = setmetatable({}, {__mode = "k"}) -- Weak keys let destroyed character records be collected.
+local records = setmetatable({}, {__mode = "k"})
 local EMPTY = {}
 local FIELDS = {
     PairedAnimationAgeFrames = true,

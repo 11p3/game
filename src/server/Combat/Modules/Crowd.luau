@@ -64,7 +64,6 @@ function Crowd.Initialize()
         until not player.Parent
         end
 
-        -- Fill empty or unavailable friend lists with asset-free fans.
         if #friends == 0 then
             for index = 1, FRIENDS_PER_PLAYER do
                 table.insert(friends, {Id = "Fan:" .. player.UserId .. ":" .. index, Username = "Fan", Fallback = true})

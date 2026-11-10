@@ -661,7 +661,7 @@ local function ResolveContacts(fighters, contacts, match_frame)
 
 end
 
--- Use each fighter's own recovery and paired reaction before exhaustion.
+-- Exhaustion waits for this fighter's recovery, not the opponent's.
 local function ResolveExhaustion(fighters, match_frame)
     for _, fighter in fighters do
         if not fighter.exhaustion_pending or fighter.health <= 0 or fighter.attack_started or fighter.dodge_started or fighter.frame < fighter.exhaustion_ready then continue end

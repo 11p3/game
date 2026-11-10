@@ -1,4 +1,3 @@
--- Keep menu descriptions separate from the rules used to simulate each style.
 local Styles = {
     Boxing = {
         Name = "Boxing",

@@ -1153,7 +1153,6 @@ function Animations.Bind(character: Model, animator: Animator)
     UpdateState(binding)
     UpdateAnimations(binding)
 
-    -- Keep one cleanup path for tracks, listeners and delayed callbacks.
     return binding.playback, function() Cleanup(binding) end
 end
 
