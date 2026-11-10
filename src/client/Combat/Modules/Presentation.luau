@@ -339,8 +339,6 @@ function Presentation.Apply(session, epoch, delta_time)
             FighterPresentation.Set(character, "AttackReadyAt", if attack_age >= 0 then started_at + (fighter.attack_startup + fighter.attack_active + fighter.attack_recovery) / SIMULATION_HZ else 0)
             FighterPresentation.Set(character, "AttackChainReadyAt", if attack_age >= 0 then started_at + (fighter.attack_startup + CombatSimulation.JabActiveFrames + CombatSimulation.HitChainRecovery) / SIMULATION_HZ else 0)
             FighterPresentation.Set(character, "GuardOnlyUntil", if fighter.reaction_until > fighter.frame then now + (fighter.reaction_until - fighter.frame) / SIMULATION_HZ else 0)
-            FighterPresentation.Set(character, "Sidestepping", fighter.sidestep_until > state.frame)
-            FighterPresentation.Set(character, "OpponentSide", fighter.side)
             FighterPresentation.Set(character, "Knockdowns", fighter.knockdowns)
         end
     end

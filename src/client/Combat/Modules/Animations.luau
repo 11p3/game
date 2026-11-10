@@ -87,7 +87,7 @@ local KNOCKED_OUT_RETRY_SECONDS = 0.5
 local MAX_KNOCKED_OUT_RETRIES = 3 -- Retry delayed assets without starting an endless loading loop.
 local ANIMATION_STALL_SECONDS = 0.15 -- Allow a short replication gap before treating logical playback as stalled.
 local MIN_FOLLOWTHROUGH_SPEED = 0.2
-local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, Sidestep = true, ClinchHeld = true, ClinchEscape = true, DodgeStartup = true, DodgeActive = true, DodgeRecovery = true})
+local INTERRUPT_ACTION_STATES = table.freeze({GettingUp = true, Hitstun = true, Knockout = true, Knockdown = true, Waiting = true, BoutOver = true, Stunned = true, HitReact = true, Retreating = true, ClinchHeld = true, ClinchEscape = true, DodgeStartup = true, DodgeActive = true, DodgeRecovery = true})
 
 local function NumberAttribute(character: Model, name: string, fallback: number): number
     local value = character:GetAttribute(name)
@@ -154,7 +154,6 @@ local function LoadTracks(fighter_id: string, animator: Animator): ({[string]: A
     local action_names = {
         "Idle",
         "Move",
-        "Sidestep",
         "Guard",
         "Dodge",
         "Knockdown",
@@ -959,11 +958,6 @@ local function OnCombatEvent(binding: Binding, event)
             binding.tracks.Dodge:Play(0.02)
         end
         Audio.Play("Whoosh", 0.3, 1.5, event.key)
-    elseif event.kind == "Sidestep" then
-        if binding.tracks.Sidestep then
-            binding.tracks.Sidestep:Play(0.03)
-        end
-        Audio.Play("Whoosh", 0.4, 0.9, event.key)
     end
 end
 

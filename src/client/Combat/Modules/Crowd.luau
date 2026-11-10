@@ -1,3 +1,4 @@
+local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Crowd = {}
 local AMBIENCE_PEAK_MULTIPLIER = 2.2 -- Cap reactive peaks relative to the authored ambience volume.
 local CHEER_REFERENCE_VOLUME = 0.4
@@ -44,17 +45,7 @@ function Crowd.Initialize()
     local crowd = combat:WaitForChild("Stadium"):WaitForChild("Crowd")
 
     local function FindOpponent()
-        local id = script.Parent.Parent:GetAttribute("OpponentUserId") or 0
-        local other = if id ~= 0 then Players:GetPlayerByUserId(id) else nil
-
-        if id ~= 0 then
-            return other and other.Character
-        end
-
-        local arenas = workspace.Combat:FindFirstChild("Arenas")
-        local active = arenas and arenas:FindFirstChild(script.Parent.Parent:GetAttribute("ArenaId") or "")
-
-        return active and active:FindFirstChild("NPC")
+        return FighterPresentation.FindOpponent(Players, workspace.Combat, script.Parent.Parent)
     end
 
     local random = Random.new()

@@ -1,3 +1,4 @@
+local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Feedback = {}
 
 function Feedback.Initialize()
@@ -13,17 +14,7 @@ function Feedback.Initialize()
     local character_versions = setmetatable({}, {__mode = "k"})
 
     local function FindOpponent()
-        local id = script.Parent.Parent:GetAttribute("OpponentUserId") or 0
-        local other = if id ~= 0 then Players:GetPlayerByUserId(id) else nil
-
-        if id ~= 0 then
-            return other and other.Character
-        end
-
-        local arenas = workspace.Combat:FindFirstChild("Arenas")
-        local active = arenas and arenas:FindFirstChild(script.Parent.Parent:GetAttribute("ArenaId") or "")
-
-        return active and active:FindFirstChild("NPC")
+        return FighterPresentation.FindOpponent(Players, workspace.Combat, script.Parent.Parent)
     end
 
 

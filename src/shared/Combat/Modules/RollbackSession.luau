@@ -12,6 +12,7 @@ local DEFAULT_HISTORY_FRAMES = 120 -- Two seconds covers snapshot gaps while kee
 local DEFAULT_ROLLBACK_FRAMES = 12 -- 200 ms trades late-input recovery against undoing hits already seen.
 local DEFAULT_FUTURE_FRAMES = 18 -- Room for 14 frames of lead, 2 of input delay and 2 of scheduling slack.
 local INPUT_FIELDS = {"axis", "strafe", "guard", "jab", "dodge", "special", "kick", "technique", "clinch", "training"}
+RollbackSession.InputFields = table.freeze(INPUT_FIELDS)
 
 RollbackSession.__index = RollbackSession
 

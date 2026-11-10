@@ -3,7 +3,7 @@ local MoveDefinitions = require(script.Parent.MoveDefinitions)
 local TrainingSimulation = require(script.Parent.TrainingSimulation)
 local AISimulation = require(script.Parent.AISimulation)
 
-local MatchSimulation = {VERSION = 7}
+local MatchSimulation = {VERSION = 8}
 local Pairing = CombatSimulation.Pairing
 local SIMULATION_HZ = 60
 local BACKPEDAL_SPEED_MULTIPLIER = 0.6 -- Slow retreat to keep passive spacing from matching forward pressure.
@@ -54,18 +54,13 @@ local function CreateFighter(index, x, config, previous, restore_health)
     fighter.fighter_id = if previous then previous.fighter_id elseif index == 1 then (config.npc_fighter_id or "Boxing") else (config.player_fighter_id or "Boxing")
     fighter.facing = if index == 1 then -1 else 1
     fighter.yaw = if fighter.facing > 0 then -math.pi * 0.5 else math.pi * 0.5
-    fighter.side = if index == 1 then 1 else -1
     fighter.knockdowns = if previous then previous.knockdowns else 0
     fighter.getup_serial = if previous then previous.getup_serial + (if restore_health then 1 else 0) else 0
     fighter.jab_sequence = if previous then previous.jab_sequence else 0
     fighter.stats = if previous then table.clone(previous.stats) else {thrown = 0, landed = 0, damage_tenths = 0, perfect_dodges = 0}
     fighter.attack_id = 0
-    fighter.attack_match_frame = 0
     fighter.hit_serial = if previous then previous.hit_serial else 0
     fighter.last_hit = if previous then previous.last_hit else {id = "", frame = 0, blocked = false, dodged = false, perfect = false, counter = false, momentum = false, opening = false}
-    fighter.sidestep_until = 0
-    fighter.sidestep_ready = 0
-    fighter.sidestep_side = 0
 
     if previous and not restore_health then
         fighter.health = previous.health
@@ -115,8 +110,6 @@ local function FinishBout(state, loser, reason)
         fighter.dodge_started = nil
         fighter.jab_buffer_until = 0
         fighter.dodge_buffer_until = 0
-        fighter.busy = false
-        fighter.sidestep_until = 0
     end
 
     Emit(state, "Finished", if loser == 0 then 1 else loser, {reason = reason})
@@ -236,8 +229,6 @@ local function KnockDown(state, index, config)
         other.dodge_requested = false
         other.jab_buffer_until = 0
         other.dodge_buffer_until = 0
-        other.busy = false
-        other.sidestep_until = 0
     end
 
     standing.state = "Retreating"
@@ -261,7 +252,6 @@ function MatchSimulation.Create(config)
         retreat_target = 0,
         retreat_speed = RETREAT_SPEED,
         finished_frame = 0,
-        opponent_turn_at = 0,
         fighters = {CreateFighter(1, if config.training and not config.pvp then 3 else 10, config), CreateFighter(2, if config.training and not config.pvp then -3 else -10, config)},
         training = if config.training and not config.pvp then TrainingSimulation.Create(config.npc_fighter_id) else nil,
         events = {}
@@ -345,8 +335,6 @@ function MatchSimulation.Step(state, input, config)
 
             npc = state.fighters[1]
             player = state.fighters[2]
-            npc.side = if npc.x < player.x then -1 else 1
-            player.side = -npc.side
             npc.facing = if player.x >= npc.x then 1 else -1
             player.facing = -npc.facing
             npc.yaw = math.atan2(npc.x - player.x, npc.z - player.z)
@@ -357,7 +345,6 @@ function MatchSimulation.Step(state, input, config)
             state.phase = "Fighting"
             state.count = 0
             state.downed = 0
-            state.opponent_turn_at = state.frame
         end
 
         return state.events
@@ -381,7 +368,7 @@ function MatchSimulation.Step(state, input, config)
     end
     input = player_input
 
-    local function Control(player, npc, input, index, speed_override)
+    local function Control(player, npc, input, speed_override)
     player.special_requested = input.special == true
     player.kick_requested = input.kick == true
     player.technique_requested = input.technique == true
@@ -395,9 +382,7 @@ function MatchSimulation.Step(state, input, config)
         player.jab_requested = false
     end
 
-    player.busy = false
-    player.side = if player.x < npc.x then -1 else 1
-    player.facing = -player.side
+    player.facing = if player.x < npc.x then 1 else -1
 
     local mobile = not player.exhaustion_pending and Pairing.Allows(player, "movement") and (player.clinch_holder or 0) == 0 and player.frame >= (player.clinch_release_until or 0) and player.frame >= player.block_until
 
@@ -428,20 +413,20 @@ function MatchSimulation.Step(state, input, config)
     Turn(player, npc, config.turn_response, state.frame)
     end
 
-    Control(player, npc, input, 2)
+    Control(player, npc, input)
 
     if config.pvp then
-        Control(npc, player, {axis = input.axis_one or 0, strafe = input.strafe_one or 0, guard = input.guard_one, jab = input.jab_one, dodge = input.dodge_one, sidestep = input.sidestep_one, special = input.special_one, kick = input.kick_one, technique = input.technique_one, clinch = input.clinch_one}, 1)
+        Control(npc, player, {axis = input.axis_one or 0, strafe = input.strafe_one or 0, guard = input.guard_one, jab = input.jab_one, dodge = input.dodge_one, special = input.special_one, kick = input.kick_one, technique = input.technique_one, clinch = input.clinch_one})
     end
 
     local mode = if state.training then state.training.mode else config.practice_mode
     if dummy_input then
-        Control(npc, player, dummy_input, 1)
+        Control(npc, player, dummy_input)
     end
 
-    if not config.pvp and not dummy_input and state.frame >= state.opponent_turn_at then
+    if not config.pvp and not dummy_input then
         local command = if mode == "Counter" then AISimulation.Decide(npc, player, state.frame, config.ai_difficulty) else {guard = mode == "Guard"}
-        Control(npc, player, command, 1, config.npc_speed)
+        Control(npc, player, command, config.npc_speed)
     end
 
     Pairing.MoveEntries(state, config, ClampPosition)
@@ -475,7 +460,6 @@ function MatchSimulation.Step(state, input, config)
             if fighter.attack_started then
                 fighter.jab_sequence += 1
                 fighter.attack_id = state.frame
-                fighter.attack_match_frame = state.frame
                 if fighter.attack_damage > 0 then
                     fighter.stats.thrown += 1
                 end

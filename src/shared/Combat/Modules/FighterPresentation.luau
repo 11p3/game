@@ -55,8 +55,6 @@ local FIELDS = {
     AttackReadyAt = true,
     AttackChainReadyAt = true,
     GuardOnlyUntil = true,
-    Sidestepping = true,
-    OpponentSide = true,
     Knockdowns = true,
     PresentationEventId = true,
     AttackEventId = true,
@@ -92,6 +90,18 @@ local function Record(character)
         records[character] = record
     end
     return record
+end
+
+function FighterPresentation.FindOpponent(Players, combat, folder)
+    local user_id = folder:GetAttribute("OpponentUserId") or 0
+    if user_id ~= 0 then
+        local opponent = Players:GetPlayerByUserId(user_id)
+        return opponent and opponent.Character
+    end
+
+    local arenas = combat:FindFirstChild("Arenas")
+    local match = arenas and arenas:FindFirstChild(folder:GetAttribute("ArenaId") or "")
+    return match and match:FindFirstChild("NPC")
 end
 
 function FighterPresentation.Set(character, name: string, value: AttributeValue?)

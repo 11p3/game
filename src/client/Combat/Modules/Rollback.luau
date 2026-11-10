@@ -183,62 +183,37 @@ function Rollback.Initialize()
         end
 
         local target = latest_frame + math.clamp(math.floor((workspace:GetServerTimeNow() - latest_time) * 60), 0, 120) + lead
-        local controlling = slot == 1 or slot == 2
         local capture_frame = math.min(target, session.state.frame + 8) - 1
         local steps = 0
 
         while session.state.frame < target and steps < 8 do
             steps += 1
 
-            if controlling then
-                local current_input = session.state.frame == capture_frame
-                local input = CombatInput.Capture(current_input)
-                local combined = RollbackSession.Predict(session.last_input)
+            local current_input = session.state.frame == capture_frame
+            local input = CombatInput.Capture(current_input)
+            local combined = RollbackSession.Predict(session.last_input)
 
-                for _, key in {
-                    "axis",
-                    "strafe",
-                    "guard",
-                    "jab",
-                    "dodge",
-                    "special",
-                    "kick",
-                    "technique",
-                    "clinch",
-                    "training"
-                } do combined[key .. (if slot == 1 then "_one" else "")] = input[key] end
+            for _, key in RollbackSession.InputFields do combined[key .. (if slot == 1 then "_one" else "")] = input[key] end
 
-                local accepted = session:Submit(session.state.frame + INPUT_DELAY, combined)
+            local accepted = session:Submit(session.state.frame + INPUT_DELAY, combined)
 
-                if current_input and accepted then
-                    CombatInput.Commit(input)
-                end
+            if current_input and accepted then
+                CombatInput.Commit(input)
             end
 
             session:Advance()
 
-            if controlling and session.state.frame % 2 == 0 then
+            if session.state.frame % 2 == 0 then
                 local batch = {}
 
                 -- Resend recent inputs so a dropped packet does not immediately lose a command.
                 for frame = math.max(1, session.state.frame - 3), session.state.frame + INPUT_DELAY do
-                    local input = session.inputs[frame]
+                    local recorded_input = session.inputs[frame]
 
-                    if input then
+                    if recorded_input then
                         local own = {}
 
-                        for _, key in {
-                            "axis",
-                            "strafe",
-                            "guard",
-                            "jab",
-                            "dodge",
-                            "special",
-                            "kick",
-                            "technique",
-                            "clinch",
-                            "training"
-                        } do own[key] = input[key .. (if slot == 1 then "_one" else "")] end
+                        for _, key in RollbackSession.InputFields do own[key] = recorded_input[key .. (if slot == 1 then "_one" else "")] end
                         table.insert(batch, {frame = frame, input = own})
                     end
                 end

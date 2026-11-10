@@ -9,7 +9,7 @@ local HttpService = game:GetService("HttpService")
 
 local MatchReplay = {}
 -- Refresh these fingerprints when simulation source changes.
-local SOURCE_HASHES = table.freeze({CombatSimulation = 1979735868, MatchSimulation = 4081393253, AISimulation = 2281590776, TrainingSimulation = 2386897836, PairedActions = 2191544561, RollbackSession = 55258887})
+local SOURCE_HASHES = table.freeze({CombatSimulation = 3876052382, MatchSimulation = 2268514253, AISimulation = 2281590776, TrainingSimulation = 2386897836, PairedActions = 2191544561, RollbackSession = 2351053503})
 MatchReplay.SourceHashes = SOURCE_HASHES
 local HEADER_PREFIX_BYTES = 8
 local HEADER_LENGTH_OFFSET = 4

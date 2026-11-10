@@ -1,7 +1,7 @@
 local MoveDefinitions = require(script.Parent.MoveDefinitions)
 local Pairing = require(script.Parent.PairedActions).New(MoveDefinitions)
 
-local CombatSimulation = {VERSION = 10, Pairing = Pairing}
+local CombatSimulation = {VERSION = 11, Pairing = Pairing}
 local SIMULATION_HZ = 60
 local STAMINA_REST_DELAY = 45 -- Wait 0.75 seconds after spending stamina before regenerating it.
 local STAMINA_RECOVERY_DELAY = 30
@@ -139,24 +139,20 @@ function CombatSimulation.CreateFighter()
         attack_damage = 8,
         attack_block_cost = 25,
         attack_hit_recovery = 7,
-        attack_whiff_recovery = 18,
         attack_dodge_recovery = 18,
         attack_block_recovery = 20,
-        attack_chain_recovery = 4,
         attack_target_stun = 0,
         attack_perfect_frames = 13,
         x = 0,
         y = 4,
         z = 0,
         facing = 1,
-        attack_facing = 1,
         state = "Idle",
         guard_held = false,
         guard_input_held = false,
         guard_pressed_at = -1,
         guard_response_ready = 0,
         jab_requested = false,
-        busy = false,
         block_until = 0,
         connected = false,
         dodge_requested = false,
@@ -222,16 +218,13 @@ local function BeginAttack(fighters, index, fighter, profile, frame, presentatio
             fighter.attack_damage = move.damage
             fighter.attack_block_cost = move.block_cost
             fighter.attack_hit_recovery = recovery.Hit
-            fighter.attack_whiff_recovery = recovery.Whiff
             fighter.attack_dodge_recovery = recovery.Dodged or recovery.Whiff
             fighter.attack_block_recovery = recovery.Blocked
-            fighter.attack_chain_recovery = move.cancels and move.cancels.Hit and move.cancels.Hit.attack or recovery.Hit
             fighter.attack_target_stun = move.target_stun or 0
             fighter.attack_perfect_frames = math.min(fighter.attack_startup - 1, move.perfect_frames or CombatSimulation.PerfectWindowFrames(fighter.attack_startup))
             fighter.jab_buffer_until = 0
             fighter.attack_started = frame
             fighter.attack_hit_index = 0
-            fighter.attack_facing = fighter.facing
             fighter.attack_forward_x = -math.sin(fighter.yaw or -fighter.facing * math.pi * 0.5)
             fighter.attack_forward_z = -math.cos(fighter.yaw or -fighter.facing * math.pi * 0.5)
             fighter.attack_advancing = move.advance ~= nil and frame <= fighter.advance_until
@@ -447,9 +440,6 @@ local function AdvanceFighter(fighters, index, fighter, match_frame)
         fighter.state = "ClinchRelease"
     elseif frame < fighter.block_until then
         fighter.state = "Blockstun"
-    elseif fighter.busy then
-        fighter.state = "Sidestep"
-        fighter.attack_started = nil
     else
         followup_startup = AdvanceRecovery(fighter, active_move, special_followup, frame)
 

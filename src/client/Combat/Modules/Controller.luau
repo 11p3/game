@@ -1,3 +1,4 @@
+local FighterPresentation = require(game.ReplicatedStorage.Combat.Modules.FighterPresentation)
 local Controller = {}
 local MAX_SHAKE_STRENGTH = 0.65
 local MIN_SHAKE_SECONDS = 0.05
@@ -25,17 +26,7 @@ function Controller.Initialize()
     local menu_blur = game:GetService("Lighting"):FindFirstChild("MenuBlur")
 
     local function FindOpponent()
-        local id = script.Parent.Parent:GetAttribute("OpponentUserId") or 0
-        local other = if id ~= 0 then Players:GetPlayerByUserId(id) else nil
-
-        if id ~= 0 then
-            return other and other.Character
-        end
-
-        local arenas = workspace.Combat:FindFirstChild("Arenas")
-        local active = arenas and arenas:FindFirstChild(script.Parent.Parent:GetAttribute("ArenaId") or "")
-
-        return active and active:FindFirstChild("NPC")
+        return FighterPresentation.FindOpponent(Players, workspace.Combat, script.Parent.Parent)
     end
 
     local faded_parts = {}
@@ -85,12 +76,6 @@ function Controller.Initialize()
         cinematic_event = event_id
     end)
 
-    script.Parent.Parent:WaitForChild("RollbackEffects").Event:Connect(function(valid)
-        if cinematic_event and not valid[cinematic_event] then
-            cinematic_until = 0
-        end
-    end)
-
     local character
     local root
     local camera_ready = false
@@ -118,6 +103,7 @@ function Controller.Initialize()
     end)
 
     folder.RollbackEffects.Event:Connect(function(valid)
+        if cinematic_event and not valid[cinematic_event] then cinematic_until = 0 end
         for key, shake in shake_events do
             if next(valid) == nil or (shake.event_id and not valid[shake.event_id]) then
                 shake_events[key] = nil
@@ -183,15 +169,7 @@ function Controller.Initialize()
         occlusion_dirty = true
         root = nil
         character = nil
-        ResetView()
-
-        for part, transparency in faded_parts do
-            if part.Parent then
-                part.LocalTransparencyModifier = transparency
-            end
-        end
-
-        table.clear(faded_parts)
+        ReleaseCamera()
     end)
 
     player:GetAttributeChangedSignal("MatchStatus"):Connect(function()
