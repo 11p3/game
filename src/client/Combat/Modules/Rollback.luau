@@ -65,8 +65,8 @@ function Rollback.Initialize()
                 arena:SetAttribute("MatchState", "Idle")
 
                 local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    root.CFrame = CFrame.new(arena:GetAttribute("LobbyX"), 4, arena:GetAttribute("LobbyZ"))
+                if root and type(packet) == "table" and player.Character == packet.character and typeof(packet.return_cframe) == "CFrame" then
+                    root.CFrame = packet.return_cframe
                 end
             end)
 

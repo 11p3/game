@@ -27,7 +27,7 @@ function CombatInput.Initialize()
         end
     end)
 
-    ContextActionService:BindActionAtPriority("CombatMovement", function() return Enum.ContextActionResult.Sink end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.W, Enum.KeyCode.S, Enum.KeyCode.A, Enum.KeyCode.D, Enum.KeyCode.Space, Enum.PlayerActions.CharacterForward, Enum.PlayerActions.CharacterBackward, Enum.PlayerActions.CharacterLeft, Enum.PlayerActions.CharacterRight, Enum.PlayerActions.CharacterJump)
+    ContextActionService:BindActionAtPriority("CombatMovement", function() return if enabled then Enum.ContextActionResult.Sink else Enum.ContextActionResult.Pass end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.W, Enum.KeyCode.S, Enum.KeyCode.A, Enum.KeyCode.D, Enum.KeyCode.Space, Enum.PlayerActions.CharacterForward, Enum.PlayerActions.CharacterBackward, Enum.PlayerActions.CharacterLeft, Enum.PlayerActions.CharacterRight, Enum.PlayerActions.CharacterJump)
     for action, key in {
         Jab = Enum.UserInputType.MouseButton1,
         Dodge = Enum.KeyCode.E,
@@ -38,6 +38,7 @@ function CombatInput.Initialize()
         Clinch = Enum.KeyCode.V
     } do
         ContextActionService:BindActionAtPriority("Combat" .. action, function(_, input_state, input_object)
+            if not enabled then return Enum.ContextActionResult.Pass end
             local began = input_state == Enum.UserInputState.Begin
 
             if action == "Guard" and not began then
@@ -66,6 +67,7 @@ function CombatInput.Initialize()
 
     if RunService:IsStudio() then
         ContextActionService:BindActionAtPriority("CombatTestGuard", function(_, input_state)
+            if not enabled then return Enum.ContextActionResult.Pass end
             if input_state == Enum.UserInputState.Begin and enabled and window_focused and player:GetAttribute("MatchStatus") == "Fighting" and not UserInputService:GetFocusedTextBox() and not GuiService.MenuIsOpen then
                 studio_guard = not studio_guard
             end

@@ -181,6 +181,7 @@ function Combat.Initialize()
             snapshot_turn = 0,
             characters = characters,
             streaming_modes = {},
+            character_defaults = {},
             session = session,
             accumulator = 0,
             next_snapshot = SNAPSHOT_INTERVAL_FRAMES + epoch % SNAPSHOT_INTERVAL_FRAMES,
@@ -201,6 +202,18 @@ function Combat.Initialize()
             local fighter = session.state.fighters[index]
 
             match.streaming_modes[index] = character.ModelStreamingMode
+            match.character_defaults[index] = {
+                root = root,
+                cframe = root.CFrame,
+                anchored = root.Anchored,
+                auto_rotate = humanoid.AutoRotate,
+                walk_speed = humanoid.WalkSpeed,
+                jump_power = humanoid.JumpPower,
+                jump_height = humanoid.JumpHeight,
+                jumping = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping),
+                display_distance = humanoid.DisplayDistanceType,
+                break_joints = humanoid.BreakJointsOnDeath
+            }
             character.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
             humanoid.AutoRotate = false
             humanoid.WalkSpeed = 0
@@ -208,6 +221,7 @@ function Combat.Initialize()
             humanoid.JumpHeight = 0
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
             humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+            humanoid.BreakJointsOnDeath = false
             root.Anchored = true
             root.AssemblyLinearVelocity = Vector3.zero
             root.CFrame = CFrame.new(origin + Vector3.new(fighter.x, fighter.y, fighter.z)) * CFrame.Angles(0, fighter.yaw, 0)
@@ -318,14 +332,30 @@ function Combat.Initialize()
                         status = if outcome.loser == 0 then "Draw" else (if outcome.loser == participant_slot then "You lose — " else "You win — ") .. outcome.reason
                     end
 
-                    participant:SetAttribute("MatchStatus", status)
-                    remote:FireClient(participant, "Lobby", {epoch = match.epoch, results = show_result})
-
+                    local slot = if participant == match.opponent then 1 else 2
+                    local defaults = match.character_defaults[slot]
+                    local character = participant.Character
                     local root = participant.Character and participant.Character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                    local returning = defaults and character == match.characters[slot] and root == defaults.root
 
-                    if root then
-                        root.CFrame = CFrame.new(arena:GetAttribute("LobbyX"), 4, arena:GetAttribute("LobbyZ"))
+                    if returning then
+                        root.CFrame = defaults.cframe
+                        root.AssemblyLinearVelocity = Vector3.zero
+                        root.AssemblyAngularVelocity = Vector3.zero
+                        root.Anchored = defaults.anchored
+                        if humanoid then
+                            humanoid.AutoRotate = defaults.auto_rotate
+                            humanoid.WalkSpeed = defaults.walk_speed
+                            humanoid.JumpPower = defaults.jump_power
+                            humanoid.JumpHeight = defaults.jump_height
+                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, defaults.jumping)
+                            humanoid.DisplayDistanceType = defaults.display_distance
+                            humanoid.BreakJointsOnDeath = defaults.break_joints
+                        end
                     end
+                    participant:SetAttribute("MatchStatus", status)
+                    remote:FireClient(participant, "Lobby", {epoch = match.epoch, results = show_result, character = if returning then character else nil, return_cframe = if returning then defaults.cframe else nil})
                 end
             end
         end
@@ -458,11 +488,8 @@ function Combat.Initialize()
         character:SetAttribute("AppearanceReady", false)
 
         local humanoid = character:WaitForChild("Humanoid")
-        local root = character:WaitForChild("HumanoidRootPart")
+        character:WaitForChild("HumanoidRootPart")
 
-        root.Anchored = true
-        root.CFrame = CFrame.new(arena:GetAttribute("LobbyX"), 4, arena:GetAttribute("LobbyZ"))
-        humanoid.BreakJointsOnDeath = false
 
         humanoid.Died:Once(function()
             EndBout(player_matches[player], "Character reset — match ended", player)

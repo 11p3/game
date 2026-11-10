@@ -131,6 +131,27 @@ function Controller.Initialize()
         folder:SetAttribute("SideControlSign", 1)
     end
 
+    local controlled_camera
+    local camera_defaults
+
+    local function ReleaseCamera()
+        if controlled_camera then
+            if controlled_camera.CameraType == Enum.CameraType.Scriptable then
+                controlled_camera.CameraType = camera_defaults.camera_type
+                controlled_camera.CameraSubject = if camera_defaults.subject and camera_defaults.subject.Parent then camera_defaults.subject else player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+                controlled_camera.FieldOfView = camera_defaults.field_of_view
+                controlled_camera.CFrame = camera_defaults.cframe
+                controlled_camera.Focus = camera_defaults.focus
+            end
+            controlled_camera, camera_defaults = nil, nil
+        end
+        for part, transparency in faded_parts do
+            if part.Parent then part.LocalTransparencyModifier = transparency end
+        end
+        table.clear(faded_parts)
+        ResetView()
+    end
+
     local function WatchCharacter(model)
         local new_root = model:WaitForChild("HumanoidRootPart", 10)
 
@@ -191,8 +212,16 @@ function Controller.Initialize()
         local dummy_root = npc and npc:FindFirstChild("HumanoidRootPart")
         local camera = workspace.CurrentCamera
 
-        if not camera or not root or not root.Parent then
+        local arena_id = folder:GetAttribute("ArenaId")
+        if not camera or not root or not root.Parent or not arena_id or arena_id == "" then
+            if controlled_camera then ReleaseCamera() end
             return
+        end
+
+        if controlled_camera ~= camera then
+            if controlled_camera then ReleaseCamera() end
+            controlled_camera = camera
+            camera_defaults = {camera_type = camera.CameraType, subject = camera.CameraSubject, field_of_view = camera.FieldOfView, cframe = camera.CFrame, focus = camera.Focus}
         end
 
         delta_time = math.clamp(delta_time, 0, 0.1)
@@ -211,7 +240,7 @@ function Controller.Initialize()
         local impact_weight = if cinematic < 0.15 then cinematic / 0.15 else ((1 - cinematic) / 0.85)^2
         local side_view = folder:GetAttribute("CameraMode") == "Side"
         local position = root.Position
-        local opponent_position = if dummy_root then dummy_root.Position else Vector3.new(arena:GetAttribute("LobbyX"), 4, arena:GetAttribute("LobbyZ"))
+        local opponent_position = if dummy_root then dummy_root.Position else position
         local midpoint = (position + opponent_position) * 0.5
         local focus_y = math.max(4, (position.Y + opponent_position.Y) * 0.5)
         local aspect_ratio = camera.ViewportSize.X / math.max(camera.ViewportSize.Y, 1)
@@ -244,8 +273,9 @@ function Controller.Initialize()
             focus = position + forward * math.max(5, math.min((opponent_position - position).Magnitude, 16)) + Vector3.new(0, 1.8, 0)
         end
 
-        local camera_limit = if dummy_root then COMBAT_CAMERA_LIMIT else 103
-        camera_position = Vector3.new(math.clamp(camera_position.X, -camera_limit, camera_limit), camera_position.Y, math.clamp(camera_position.Z, -camera_limit, camera_limit))
+        if dummy_root then
+            camera_position = Vector3.new(math.clamp(camera_position.X, -COMBAT_CAMERA_LIMIT, COMBAT_CAMERA_LIMIT), camera_position.Y, math.clamp(camera_position.Z, -COMBAT_CAMERA_LIMIT, COMBAT_CAMERA_LIMIT))
+        end
 
         local target_fov = if side_view then SIDE_FIELD_OF_VIEW else BEHIND_FIELD_OF_VIEW
 

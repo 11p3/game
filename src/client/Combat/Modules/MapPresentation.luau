@@ -27,10 +27,7 @@ function MapPresentation.Initialize()
 
     local sky = Lighting:FindFirstChildOfClass("Sky")
     local celestial_defaults = sky and sky.CelestialBodiesShown
-
-    if sky then
-        sky.StarCount = 0
-    end
+    local star_defaults = sky and sky.StarCount
 
     local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
     local atmosphere_defaults = atmosphere and {Density = atmosphere.Density, Haze = atmosphere.Haze, Color = atmosphere.Color, Decay = atmosphere.Decay}
@@ -129,11 +126,14 @@ function MapPresentation.Initialize()
         for object in hidden do
             if not object.Parent then hidden[object] = nil else SetArenaVisible(object, map_id == "Arena") end
         end
-        for property, original in lighting_defaults do Lighting[property] = if Maps[map_id].Lighting then Maps[map_id].Lighting[property] else original end
+        for property, original in lighting_defaults do
+            local value = Maps[map_id].Lighting and Maps[map_id].Lighting[property]
+            Lighting[property] = if value ~= nil then value else original
+        end
         for effect, enabled in effect_defaults do if effect.Parent then effect.Enabled = map_id == "Arena" and enabled end end
 
         if sky then
-            sky.StarCount = 0
+            sky.StarCount = if map_id == "Arena" then star_defaults else 0
             sky.CelestialBodiesShown = map_id == "Arena" and celestial_defaults
         end
 
