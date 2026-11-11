@@ -1,4 +1,5 @@
 local Hitboxes = {}
+local STUDIO = game:GetService("RunService"):IsStudio()
 local MoveDefinitions = require(game:GetService("ReplicatedStorage").Combat.Modules.MoveDefinitions)
 local TARGET_DIAMETER = 0.24 -- Mark the logical target point; this is not a physical hurtbox size.
 local container
@@ -18,7 +19,7 @@ function Hitboxes.Clear()
 end
 
 function Hitboxes.Apply(state, enabled, revision)
-    if not enabled or state.phase ~= "Fighting" then
+    if not STUDIO or not enabled or state.phase ~= "Fighting" then
         if container then Hitboxes.Clear() end
         return
     end

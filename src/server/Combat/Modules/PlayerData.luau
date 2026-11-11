@@ -20,7 +20,7 @@ local AUTOSAVE_SECONDS = 30
 
 local function Publish(player, profile)
     for key, value in profile.data.preferences do
-        player:SetAttribute(key, value)
+        player:SetAttribute(key, if key == "ShowHitboxes" and not studio then "Off" else value)
     end
     local leaderboard = player:FindFirstChild("leaderstats")
 
@@ -341,6 +341,7 @@ function PlayerData.Initialize()
     end
 
     shared.Remotes.Settings.OnServerEvent:Connect(function(player, key, value)
+        if key == "ShowHitboxes" and not studio then return end
         local record = records[player]
         local status = player:GetAttribute("MatchStatus")
         if not record or not PlayerData.IsReady(player) or status == "Fighting" or status == "Searching" or type(key) ~= "string" or (key ~= "CameraMode" and key ~= "MovementKeys" and key ~= "ShowHitboxes") or os.clock() < record.next_request then

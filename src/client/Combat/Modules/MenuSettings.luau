@@ -1,12 +1,14 @@
 local MenuSettings = {}
 
 function MenuSettings.Initialize(settings_panel, folder)
+    local studio = game:GetService("RunService"):IsStudio()
     local player = game:GetService("Players").LocalPlayer
     local shared = game:GetService("ReplicatedStorage"):WaitForChild("Combat")
     local settings = shared.Remotes:WaitForChild("Settings")
     local camera_button = settings_panel.CameraMode
     local movement_button = settings_panel.MovementKeys
     local hitbox_button = settings_panel.ShowHitboxes
+    hitbox_button.Visible = studio
 
     local function RefreshSettings()
         local camera_mode = player:GetAttribute("CameraMode") or "Behind"
@@ -14,11 +16,11 @@ function MenuSettings.Initialize(settings_panel, folder)
 
         folder:SetAttribute("CameraMode", camera_mode)
         folder:SetAttribute("MovementKeys", movement_keys)
-        folder:SetAttribute("ShowHitboxes", player:GetAttribute("ShowHitboxes") == "On")
+        folder:SetAttribute("ShowHitboxes", studio and player:GetAttribute("ShowHitboxes") == "On")
         local data_status = player:GetAttribute("DataStatus")
         local ready = data_status == "Ready" or data_status == "Studio"
-        hitbox_button.Active = ready
-        hitbox_button.AutoButtonColor = ready
+        hitbox_button.Active = studio and ready
+        hitbox_button.AutoButtonColor = studio and ready
         hitbox_button.Text = if data_status == "Loading" then "Hitboxes: Loading..." elseif not ready then "Hitboxes: Unavailable" else "Hitboxes: " .. (player:GetAttribute("ShowHitboxes") or "Off")
         camera_button.Active = ready
         camera_button.AutoButtonColor = ready
@@ -44,7 +46,7 @@ function MenuSettings.Initialize(settings_panel, folder)
     end)
 
     hitbox_button.Activated:Connect(function()
-        if player:GetAttribute("MatchStatus") == "Fighting" then return end
+        if not studio or player:GetAttribute("MatchStatus") == "Fighting" then return end
         settings:FireServer("ShowHitboxes", if player:GetAttribute("ShowHitboxes") == "On" then "Off" else "On")
     end)
 
